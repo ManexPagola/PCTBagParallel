@@ -4,8 +4,10 @@ package weka.classifiers.trees.j48PartiallyConsolidated;
 import java.io.*;
 import weka.classifiers.Evaluation;
 import weka.classifiers.trees.J48;
+import weka.classifiers.trees.J48ItPartiallyConsolidated;
 import weka.classifiers.trees.J48PartiallyConsolidated;
 import weka.classifiers.trees.J48PartiallyConsolidatedParallel;
+import weka.classifiers.trees.j48ItPartiallyConsolidated.C45ItPartiallyConsolidatedPruneableClassifierTree;
 import weka.core.Instances;
 import weka.core.Option;
 import weka.core.converters.ConverterUtils.DataSource;
@@ -77,7 +79,11 @@ public class PCTBagging_proba {
 	public static void main(String[] args) throws Exception {
 		/* Read the dataset */
 		String filenames[];
+		DataSource sr = null;
 		filenames = new String[10];
+		double time_wholect = 0;
+		double time_partct = 0;
+		double time_bagging = 0;
 		
 		//filenames[0] = "C:\\Program Files\\Weka-3-8-6\\data\\weather.nominal.arff";
 		filenames[0] = "C:\\Program Files\\Weka-3-8-6\\data\\breast-cancer.arff";
@@ -90,7 +96,32 @@ public class PCTBagging_proba {
 		//filenames[7] = "C:\\Program Files\\Weka-3-8-6\\data\\ionosphere.arff";
 		//filenames[8] = "C:\\Program Files\\Weka-3-8-6\\data\\soybean.arff";
 		
-		PCTB_ebaluazioa(filenames, 100.0);
+		//PCTB_ebaluazioa(filenames, 100.0);
+		
+		try {
+			sr = new DataSource("C:\\Program Files\\Weka-3-8-6\\data\\hypothyroid.arff");
+		} catch (Exception e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		
+		Instances ds = sr.getDataSet();
+		ds.setClassIndex(ds.numAttributes()-1);
+		
+		J48ItPartiallyConsolidated pctbit_tree = new J48ItPartiallyConsolidated();
+		
+		pctbit_tree.setDebug(true);
+		pctbit_tree.buildClassifier(ds);
+		
+		time_wholect = pctbit_tree.getMeasure("measureElapsedTimeTrainingWholeCT");
+		time_partct = pctbit_tree.getMeasure("measureElapsedTimeTrainingPartialCT");
+		time_bagging = pctbit_tree.getMeasure("measureElapsedTimeTrainingAssocBagging");
+		
+		System.out.println("Time Whole CT: " + time_wholect + "\n");
+		System.out.println("Time Partial CT: " + time_partct + "\n");
+		System.out.println("Time Bagging: " + time_bagging + "\n");
+		
+		
 		//String filename = "C:\\Program Files\\Weka-3-8-6\\data\\breast-cancer.arff";
 		//DataSource source = null;
 		//try {
