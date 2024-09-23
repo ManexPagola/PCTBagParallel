@@ -16,6 +16,7 @@ import weka.classifiers.trees.j48Consolidated.C45ConsolidatedModelSelection;
 import weka.classifiers.trees.j48Consolidated.InstancesConsolidated;
 import weka.classifiers.trees.j48PartiallyConsolidated.C45ModelSelectionExtended;
 import weka.classifiers.trees.j48PartiallyConsolidated.C45PartiallyConsolidatedPruneableClassifierTree;
+import weka.classifiers.trees.j48PartiallyConsolidated.C45PartiallyConsolidatedPruneableClassifierTreeParallel;
 import weka.core.AdditionalMeasureProducer;
 import weka.core.Drawable;
 import weka.core.Instances;
@@ -88,12 +89,12 @@ public class J48PartiallyConsolidatedParallel
 	 * 
 	 * @throws Exception if number of execution slots is lower than 0
 	 */
-	public void buildClassifier(Instances instances) throws Exception {
+	/*public void buildClassifier(Instances instances) throws Exception {
 		super.buildClassifier(instances);
 		if (this.m_numExecutionSlots < 0) {
 			throw new Exception("Number of execution slots needs to be >= 0!");
 		}
-	}
+	}*/
 	
 	/**
 	 * Klasifikatzailea eraikitzen du paraleloan / Builds classifier concurrently
@@ -101,10 +102,11 @@ public class J48PartiallyConsolidatedParallel
 	 * @param instances the data to train the classifier with 
 	 * @throws Exception if classifier can't be built successfully
 	 */
-	public void buildClassifiers(Instances instances) throws Exception {
+	public void buildClassifier(Instances instances) throws Exception {
 		int numCore;
 		
 		if (this.m_numExecutionSlots < 0) {
+			System.out.println("ERROR!!!");
 			throw new Exception("Number of execution slots needs to be >= 0!");
 		}
 		
@@ -118,9 +120,17 @@ public class J48PartiallyConsolidatedParallel
 			instances = new Instances(instances);
 			instances.deleteWithMissingClass();
 			
+			//long startTime = System.nanoTime();
 			//Generate as many samples as the number of samples with the given instances
-			Instances[] samplesVector = generateSamplesParallel(instances, numCore);
-			System.out.println("\n " + samplesVector.length + " \n" );
+			Instances[] samplesVector = super.generateSamples(instances);
+			//Instances[] samplesVector = generateSamplesParallel(instances, numCore);
+			//long endTime = System.nanoTime();
+			
+			//long execTime = (endTime - startTime) / 1000;
+			
+			//System.out.println("Exekuzioak " + execTime + " mikros behar izan ditu \n");
+			
+			//System.out.println("\n " + samplesVector.length + " \n" );
 		    //if (m_Debug) printSamplesVector(samplesVector);
 			//PRINTZIPIOZ, HONAINO DAGO PARALELIZATURIK
 			/** Set the model selection method to determine the consolidated decisions */
@@ -132,12 +142,22 @@ public class J48PartiallyConsolidatedParallel
 			C45ModelSelectionExtended baseModelToForceDecision = new C45ModelSelectionExtended(m_minNumObj, instances, 
 					m_useMDLcorrection, m_doNotMakeSplitPointActualValue);
 			// TODO Implement the option reducedErrorPruning of J48
-			C45PartiallyConsolidatedPruneableClassifierTree localClassifier =
-					new C45PartiallyConsolidatedPruneableClassifierTree(modSelection, baseModelToForceDecision,
+			C45PartiallyConsolidatedPruneableClassifierTreeParallel localClassifier =
+					new C45PartiallyConsolidatedPruneableClassifierTreeParallel(modSelection, baseModelToForceDecision,
 							!m_unpruned, m_CF, m_subtreeRaising, !m_noCleanup, m_collapseTree, samplesVector.length,
 							m_PCTBpruneBaseTreesWithoutPreservingConsolidatedStructure);
+			
+			/*for (int i=0; i < samplesVector.length; i++) {
+				if (samplesVector[i] == null) {
+					System.out.println("i hau NULL da: " + i + "\n");
+				} else {
+					System.out.println(samplesVector[i].toString());
+				}
+				
+			}*/
+			//System.out.println("samplesVector length: " + samplesVector.length + "\n");
 
-			localClassifier.buildClassifier(instances, samplesVector, m_PCTBconsolidationPercent);
+			localClassifier.buildClassifierParallel(instances, samplesVector, m_PCTBconsolidationPercent, numCore);
 
 			m_root = localClassifier;
 			m_Classifiers = localClassifier.getSampleTreeVector();
@@ -148,7 +168,7 @@ public class J48PartiallyConsolidatedParallel
 			((C45ModelSelection) modSelection).cleanup();
 			((C45ModelSelection) baseModelToForceDecision).cleanup();
 		} else {
-			this.buildClassifier(instances);
+			super.buildClassifier(instances);
 		}
 		
 		
@@ -421,6 +441,7 @@ public class J48PartiallyConsolidatedParallel
 		classesVector = null;
 		classSizeVector = null;
 		newClassSizeVector = null;
+		executorPool.shutdownNow();
 
 		return samplesVector;
 	}
@@ -532,6 +553,7 @@ public class J48PartiallyConsolidatedParallel
 			};
 			executorPool.submit(newTask);
 		}
+		executorPool.shutdownNow();
 		return samplesVector;
 	}
 	
@@ -824,14 +846,15 @@ public class J48PartiallyConsolidatedParallel
 		
 		//Atomikoki berritzen den Integer balioa. Hari batek ezingo du balio hau berritu jada beste hari bat badago lan berdina egiten
 		final AtomicInteger numFailed = new AtomicInteger();
+		
+		final InstancesConsolidated[] currentClassesVector = classesVector;
+		final int[] currentNewClassSizeVector = newClassSizeVector;
+		final int[] currentClassSizeVector = classSizeVector;
 
 		// Generate the vector of samples 
 		for(int iSample = 0; iSample < numberSamples; iSample++){
 			
 			final int currentSample = iSample;
-			final InstancesConsolidated[] currentClassesVector = classesVector;
-			final int[] currentNewClassSizeVector = newClassSizeVector;
-			final int[] currentClassSizeVector = classSizeVector;
 			
 			Runnable newTask = new Runnable() {
 				public void run() {
@@ -868,7 +891,7 @@ public class J48PartiallyConsolidatedParallel
 					} catch (Throwable var) {
 						var.printStackTrace();
 						numFailed.incrementAndGet();
-						System.err.println("Iteration " + currentSample + " failed!");
+						System.out.println("Iteration " + currentSample + " failed!");
 					} finally {
 						doneSignal.countDown();
 					}
@@ -876,12 +899,16 @@ public class J48PartiallyConsolidatedParallel
 				}
 			};
 			executorPool.submit(newTask);
+			
 		}
+		doneSignal.await();
+		executorPool.shutdownNow();
+		
 		classesVector = null;
 		classSizeVector = null;
 		maxClassSizeVector = null;
 		newClassSizeVector = null;
-
+		
 		return samplesVector;
 	}
 	

@@ -88,15 +88,30 @@ public class C45PartiallyConsolidatedPruneableClassifierTree extends
 	 */
 	public void buildClassifier(Instances data, Instances[] samplesVector, float consolidationPercent) throws Exception {
 
+		long startTimeBT = System.nanoTime();
 		buildTree(data, samplesVector, m_subtreeRaising || !m_cleanup);
+		long endTimeBT = System.nanoTime();
 		if (m_collapseTheTree) {
 			collapse();
 		}
 		if (m_pruneTheTree) {
 			prune();
 		}
+		long startTimePC = System.nanoTime();
 		leavePartiallyConsolidated(consolidationPercent);
+		long endTimePC = System.nanoTime();
+		
+		long startTimeBagging = System.nanoTime();
 		applyBagging();
+		long endTimeBagging = System.nanoTime();
+		
+		long execTimeBT = (endTimeBT - startTimeBT) / 1000;
+		long execTimePC = (endTimePC - startTimePC) / 1000;
+		long execTimeBagging = (endTimeBagging - startTimeBagging) / 1000;
+		
+		System.out.println("Zuhaitzaren eraiketak " + execTimeBT + " mikros behar izan ditu \n");
+		System.out.println("Kontsolidazio partzialaren exekuzioak " + execTimePC + " mikros behar izan ditu \n");
+		System.out.println("Bagging-en exekuzioak " + execTimeBagging + " mikros behar izan ditu \n");
 		
 		if (m_cleanup)
 			cleanup(new Instances(data, 0));

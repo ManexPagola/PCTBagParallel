@@ -96,9 +96,9 @@ public class PCTBagging_proba {
 		//filenames[7] = "C:\\Program Files\\Weka-3-8-6\\data\\ionosphere.arff";
 		//filenames[8] = "C:\\Program Files\\Weka-3-8-6\\data\\soybean.arff";
 		
-		//PCTB_ebaluazioa(filenames, 100.0);
+		PCTB_ebaluazioa(filenames, 20.0);
 		
-		try {
+	/*	try {
 			sr = new DataSource("C:\\Program Files\\Weka-3-8-6\\data\\hypothyroid.arff");
 		} catch (Exception e) {
 			// TODO Auto-generated catch block
@@ -111,15 +111,15 @@ public class PCTBagging_proba {
 		J48ItPartiallyConsolidated pctbit_tree = new J48ItPartiallyConsolidated();
 		
 		pctbit_tree.setDebug(true);
-		pctbit_tree.buildClassifier(ds);
+		pctbit_tree.buildClassifier(ds);*/
 		
-		time_wholect = pctbit_tree.getMeasure("measureElapsedTimeTrainingWholeCT");
+		/*time_wholect = pctbit_tree.getMeasure("measureElapsedTimeTrainingWholeCT");
 		time_partct = pctbit_tree.getMeasure("measureElapsedTimeTrainingPartialCT");
 		time_bagging = pctbit_tree.getMeasure("measureElapsedTimeTrainingAssocBagging");
 		
 		System.out.println("Time Whole CT: " + time_wholect + "\n");
 		System.out.println("Time Partial CT: " + time_partct + "\n");
-		System.out.println("Time Bagging: " + time_bagging + "\n");
+		System.out.println("Time Bagging: " + time_bagging + "\n");*/
 		
 		
 		//String filename = "C:\\Program Files\\Weka-3-8-6\\data\\breast-cancer.arff";
