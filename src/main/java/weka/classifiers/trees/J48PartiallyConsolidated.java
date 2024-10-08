@@ -315,7 +315,13 @@ public class J48PartiallyConsolidated
 		instances.deleteWithMissingClass();
 		
 		//Generate as many samples as the number of samples with the given instances
+		//long startTime = System.nanoTime();
 		Instances[] samplesVector = generateSamples(instances);
+		//long endTime = System.nanoTime();
+		
+		//long execTime = (endTime - startTime) / 1000;
+		
+		//System.out.println("Laginketak " + execTime + " mikros behar izan ditu \n");
 		//System.out.println("\n " + samplesVector.length + " \n" );
 	    //if (m_Debug)
 	    //	printSamplesVector(samplesVector);

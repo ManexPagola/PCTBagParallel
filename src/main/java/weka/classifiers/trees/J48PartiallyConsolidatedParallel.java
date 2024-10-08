@@ -120,19 +120,18 @@ public class J48PartiallyConsolidatedParallel
 			instances = new Instances(instances);
 			instances.deleteWithMissingClass();
 			
-			//long startTime = System.nanoTime();
+			long startTime = System.nanoTime();
 			//Generate as many samples as the number of samples with the given instances
 			Instances[] samplesVector = super.generateSamples(instances);
 			//Instances[] samplesVector = generateSamplesParallel(instances, numCore);
-			//long endTime = System.nanoTime();
+			long endTime = System.nanoTime();
 			
-			//long execTime = (endTime - startTime) / 1000;
+			long execTime = (endTime - startTime) / 1000;
 			
-			//System.out.println("Exekuzioak " + execTime + " mikros behar izan ditu \n");
+			//System.out.println("Laginketak " + execTime + " mikros behar izan ditu \n");
 			
 			//System.out.println("\n " + samplesVector.length + " \n" );
 		    //if (m_Debug) printSamplesVector(samplesVector);
-			//PRINTZIPIOZ, HONAINO DAGO PARALELIZATURIK
 			/** Set the model selection method to determine the consolidated decisions */
 		    ModelSelection modSelection;
 			// TODO Implement the option binarySplits of J48
@@ -438,6 +437,7 @@ public class J48PartiallyConsolidatedParallel
 			
 			executorPool.submit(newTask);
 		}
+		doneSignal.await();
 		classesVector = null;
 		classSizeVector = null;
 		newClassSizeVector = null;
@@ -553,7 +553,9 @@ public class J48PartiallyConsolidatedParallel
 			};
 			executorPool.submit(newTask);
 		}
+		doneSignal.await();
 		executorPool.shutdownNow();
+		
 		return samplesVector;
 	}
 	

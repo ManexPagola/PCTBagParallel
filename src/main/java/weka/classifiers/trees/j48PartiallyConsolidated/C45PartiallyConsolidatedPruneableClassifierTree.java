@@ -108,10 +108,12 @@ public class C45PartiallyConsolidatedPruneableClassifierTree extends
 		long execTimeBT = (endTimeBT - startTimeBT) / 1000;
 		long execTimePC = (endTimePC - startTimePC) / 1000;
 		long execTimeBagging = (endTimeBagging - startTimeBagging) / 1000;
+		long totalTime = execTimeBT + execTimePC + execTimeBagging;
 		
-		System.out.println("Zuhaitzaren eraiketak " + execTimeBT + " mikros behar izan ditu \n");
-		System.out.println("Kontsolidazio partzialaren exekuzioak " + execTimePC + " mikros behar izan ditu \n");
-		System.out.println("Bagging-en exekuzioak " + execTimeBagging + " mikros behar izan ditu \n");
+		//System.out.println("Zuhaitzaren eraiketak " + execTimeBT + " us behar izan ditu \n");
+		System.out.println("Kontsolidazio partzialaren exekuzioak " + execTimePC + " us behar izan ditu \n");
+		//System.out.println("Bagging-en exekuzioak " + execTimeBagging + " us behar izan ditu \n");
+		//System.out.println("Exekuzio denbora guztira: " + totalTime + " us \n");
 		
 		if (m_cleanup)
 			cleanup(new Instances(data, 0));
@@ -212,7 +214,7 @@ public class C45PartiallyConsolidatedPruneableClassifierTree extends
 	/**
 	 * Set current node as leaf. Also for all base trees
 	 */
-	private void setAsLeaf(){
+	protected void setAsLeaf(){
 		// Free adjacent trees
 		m_sons = null;
 		m_isLeaf = true;
