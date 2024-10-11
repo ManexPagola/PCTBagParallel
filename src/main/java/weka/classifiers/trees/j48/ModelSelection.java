@@ -44,6 +44,7 @@ public abstract class ModelSelection
    * @exception Exception if model can't be selected
    */
   public abstract ClassifierSplitModel selectModel(Instances data) throws Exception;
+  
 
   /**
    * Selects a model for the given train data using the given test data
@@ -55,4 +56,7 @@ public abstract class ModelSelection
 
     throw new Exception("Model selection method not implemented");
   }
+
+
 }
+ 

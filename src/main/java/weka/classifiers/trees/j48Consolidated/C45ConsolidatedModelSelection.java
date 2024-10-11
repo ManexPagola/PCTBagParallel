@@ -1,5 +1,10 @@
 package weka.classifiers.trees.j48Consolidated;
 
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
+
 import weka.classifiers.trees.j48.*;
 import weka.core.Instances;
 import weka.core.Utils;
@@ -113,6 +118,99 @@ public class C45ConsolidatedModelSelection extends C45ModelSelection {
 			return noSplitModel;
 		return consolidatedModel;
 	}
+	
+	
+	/**
+	 * Selects Consolidated-type split based on C4.5 for the given dataset.
+	 * 
+	 * @param data the data to train the classifier with
+	 * @param samplesVector the vector of samples
+	 * @param numCore the number of threads going to be used to select the Consolidated-type split
+	 * @return the consolidated model to be used to split
+	 * @throws Exception  if something goes wrong
+	 */
+	public ClassifierSplitModel selectModelParallel(Instances data, Instances[] samplesVector, int numCore) throws Exception{
+
+		/** Number of Samples. */
+		int numberSamples = samplesVector.length;
+		/** Vector storing the chosen attribute to split in each sample */
+		int[] attIndexVector = new int[numberSamples];
+		/** Vector storing the split point to use to split, if numerical, in each sample */
+		double[] splitPointVector = new double[numberSamples];
+		
+		ExecutorService executorPool = Executors.newFixedThreadPool(numCore);
+		
+		final CountDownLatch doneSignal = new CountDownLatch(numberSamples);
+		
+		final AtomicInteger numFailed = new AtomicInteger();
+
+		// Select C4.5-type split for each sample and
+		//  save the chosen attribute (and the split point if numerical) to split 
+		for (int iSample = 0; iSample < numberSamples; iSample++) {
+			
+			final int currentSample = iSample;
+			
+			Runnable selectModelTask = new Runnable() {
+				public void run() {
+					try {
+						ClassifierSplitModel localModel = m_toSelectModelToConsolidate.selectModel(samplesVector[currentSample]);
+						if(localModel.numSubsets() > 1){
+							attIndexVector[currentSample] = ((C45Split) localModel).attIndex();
+							splitPointVector[currentSample] = ((C45Split) localModel).splitPoint();
+						}else{
+							attIndexVector[currentSample] = -1;
+							splitPointVector[currentSample] = -1;
+						}
+					} catch (Throwable e) {
+						e.printStackTrace();
+						numFailed.incrementAndGet();
+						System.err.println("Iteration " + currentSample + " failed!");
+					} finally {
+						doneSignal.countDown();
+					}
+				}
+			};
+			executorPool.submit(selectModelTask);
+		}
+		
+		doneSignal.await();
+		executorPool.shutdownNow();
+		
+		// Get the most voted attribute (index)
+		int votesCountByAtt[] = new int[data.numAttributes()];
+		int numberVotes = 0;
+		for (int iAtt = 0; iAtt < data.numAttributes(); iAtt++)
+			votesCountByAtt[iAtt] = 0;
+		for (int iSample = 0; iSample < numberSamples; iSample++)
+			if(attIndexVector[iSample]!=-1){
+				votesCountByAtt[attIndexVector[iSample]]++;
+				numberVotes++;
+			}
+		int mostVotedAtt = Utils.maxIndex(votesCountByAtt);
+
+		Distribution checkDistribution = new DistributionConsolidated(samplesVector);
+		NoSplit noSplitModel = new NoSplit(checkDistribution);
+		// if all nodes are leafs,
+		if(numberVotes==0)
+			//  return a consolidated leaf
+			return noSplitModel;
+		
+		// Consolidate the split point (if numerical)
+		double splitPointConsolidated = consolidateSplitPointParallel(mostVotedAtt, attIndexVector, splitPointVector, data, numCore);
+		// Creates the consolidated model
+		C45ConsolidatedSplit consolidatedModel =
+				new C45ConsolidatedSplit(mostVotedAtt, m_minNoObj, checkDistribution.total(), 
+						m_useMDLcorrection, data, samplesVector, splitPointConsolidated);
+
+//		// Set the split point analogue to C45 if attribute numeric.
+//		// // It is not necessary for the consolidation process because the median value 
+//		// //  is already one of the proposed split points.
+//		consolidatedModel.setSplitPoint(data);
+		
+		if(!consolidatedModel.checkModel())
+			return noSplitModel;
+		return consolidatedModel;
+	}
 
 	/**
 	 * Calculates the median of the split points related to 'mostVotedAtt' attribute, if this is numerical
@@ -133,6 +231,63 @@ public class C45ConsolidatedModelSelection extends C45ModelSelection {
 			for (int iSample = 0; iSample < numberSamples; iSample++)
 				if(attIndexVector[iSample] == mostVotedAtt)
 					splitPointChosenAttVector.addElement(splitPointVector[iSample]);
+			// Number of split points related to chosen attribute
+			int numberSplitPoints = splitPointChosenAttVector.size();
+			// Get the median of the split points vector
+			// // TODO median could be a method to insert in the class 'DoubleVector'
+			splitPointChosenAttVector.sort();
+			consolidatedSplitPoint = splitPointChosenAttVector.get(((numberSplitPoints+1)/2)-1);
+		}
+		return consolidatedSplitPoint;
+	}
+	
+	/**
+	 * Calculates the median of the split points related to 'mostVotedAtt' attribute, if this is numerical
+	 *  (MAX_VALUE otherwise).
+	 * 
+	 * @param mostVotedAtt the most voted attribute (index)
+	 * @param attIndexVector Vector storing the chosen attribute to split in each sample
+	 * @param splitPointVector Vector storing the split point to use to split, if numerical, in each sample
+	 * @param data the training sample. Only to know if mostVotedAtt is numerical
+	 * @param numCore the number of threads going to be used to calculate the median of the split points
+	 * @throws Exception  if something goes wrong
+	 * @return the consolidated split point 
+	 */
+	protected double consolidateSplitPointParallel(int mostVotedAtt, 
+			int[] attIndexVector, double[] splitPointVector, Instances data, int numCore) throws Exception{
+		int numberSamples = attIndexVector.length;
+		double consolidatedSplitPoint = Double.MAX_VALUE;
+		if(data.attribute(mostVotedAtt).isNumeric()){
+			
+			ExecutorService executorPool = Executors.newFixedThreadPool(numCore);
+			final CountDownLatch doneSignal = new CountDownLatch(numberSamples);
+			final AtomicInteger numFailed = new AtomicInteger();
+			
+			DoubleVector splitPointChosenAttVector = new DoubleVector();
+			for (int iSample = 0; iSample < numberSamples; iSample++) {
+				
+				final int currentSample = iSample;
+				
+				Runnable splitPointTask = new Runnable() {
+					public void run() {
+						try {
+							if(attIndexVector[currentSample] == mostVotedAtt)
+								splitPointChosenAttVector.addElement(splitPointVector[currentSample]);
+						} catch(Throwable e) {
+							e.printStackTrace();
+							numFailed.incrementAndGet();
+							System.out.println("Iteration " + currentSample + " failed!");
+						} finally {
+							doneSignal.countDown();
+						}
+					}
+				};
+				executorPool.submit(splitPointTask);
+			}
+			
+			doneSignal.await();
+			executorPool.shutdownNow();
+			
 			// Number of split points related to chosen attribute
 			int numberSplitPoints = splitPointChosenAttVector.size();
 			// Get the median of the split points vector

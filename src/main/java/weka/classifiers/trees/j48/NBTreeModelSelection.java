@@ -205,4 +205,5 @@ public class NBTreeModelSelection extends ModelSelection {
   public String getRevision() {
     return RevisionUtils.extract("$Revision: 10531 $");
   }
+
 }

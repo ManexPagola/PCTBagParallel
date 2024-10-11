@@ -6,12 +6,14 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.ReentrantLock;
 
 import weka.classifiers.trees.j48.ClassifierSplitModel;
 import weka.classifiers.trees.j48.ClassifierTree;
 import weka.classifiers.trees.j48.ModelSelection;
 import weka.classifiers.trees.j48.NoSplit;
 import weka.classifiers.trees.j48Consolidated.C45ConsolidatedModelSelection;
+import weka.classifiers.trees.j48Consolidated.C45ConsolidatedModelSelectionParallel;
 import weka.classifiers.trees.j48Consolidated.C45ConsolidatedPruneableClassifierTree;
 import weka.core.Instances;
 import weka.core.Utils;
@@ -50,7 +52,7 @@ public class C45PartiallyConsolidatedPruneableClassifierTreeParallel extends C45
 			prune();
 		}
 		long startTimePC = System.nanoTime();
-		leavePartiallyConsolidatedParallel(consolidationPercent, numCore);
+		leavePartiallyConsolidated(consolidationPercent);
 		long endTimePC = System.nanoTime();
 		
 		long startTimeBagging = System.nanoTime();
@@ -62,8 +64,8 @@ public class C45PartiallyConsolidatedPruneableClassifierTreeParallel extends C45
 		long execTimeBagging = (endTimeBagging - startTimeBagging) / 1000;
 		long totalTime = execTimeBT + execTimePC + execTimeBagging;
 		
-		//System.out.println("Zuhaitzaren eraiketak " + execTimeBT + " us behar izan ditu \n");
-		System.out.println("Kontsolidazio partzialaren exekuzioak " + execTimePC + " us behar izan ditu \n");
+		System.out.println("Zuhaitzaren eraiketak " + execTimeBT + " us behar izan ditu \n");
+		//System.out.println("Kontsolidazio partzialaren exekuzioak " + execTimePC + " us behar izan ditu \n");
 		//System.out.println("Bagging-en exekuzioak " + execTimeBagging + " us behar izan ditu \n");
 		//System.out.println("Exekuzio denbora guztira: " + totalTime + " us \n");
 		
@@ -130,9 +132,10 @@ public class C45PartiallyConsolidatedPruneableClassifierTreeParallel extends C45
 	    //executorPool.shutdownNow();
 
 		/** Select the best model to split (if it is worth) based on the consolidation process */
-		m_localModel = ((C45ConsolidatedModelSelection)m_toSelectModel).selectModel(data, samplesVector);
+		m_localModel = ((C45ConsolidatedModelSelection)m_toSelectModel).selectModelParallel(data, samplesVector, numCore);
 		
 		final CountDownLatch doneSignal2 = new CountDownLatch(numberSamples);
+		
 		
 		for (int iSample = 0; iSample < numberSamples; iSample++) {
 			
@@ -172,26 +175,32 @@ public class C45PartiallyConsolidatedPruneableClassifierTreeParallel extends C45
 			
 			/** Split data according to the consolidated m_localModel */
 			localInstances = m_localModel.split(data);
+			
 			for (int iSample = 0; iSample < numberSamples; iSample++)
 				localInstancesVector.add(m_localModel.split(samplesVector[iSample]));
 			
+			
 			/**final CountDownLatch doneSignal3 = new CountDownLatch(numberSamples);
+			ReentrantLock lock = new ReentrantLock();
 			
 			final Instances[] currentSamplesVector = samplesVector;
 			
 			for (int iSample = 0; iSample < numberSamples; iSample++) {
 				
-				final int currentSample = iSample;
+				final int nSample = iSample;
+				Instances currentSample = currentSamplesVector[iSample];
 				
 				Runnable localInstanceAddTask = new Runnable() {
 					public void run() {
+						lock.lock();
 						try {
-							localInstancesVector.add(m_localModel.split(currentSamplesVector[currentSample]));
+							localInstancesVector.add(m_localModel.split(currentSample));
 						} catch(Throwable e) {
-							e.printStackTrace();
+							//e.printStackTrace();
 							numFailed.incrementAndGet();
-							System.out.println("Iteration " + currentSample + " failed!");
+							System.out.println("Iteration " + nSample + " failed!");
 						} finally {
+							lock.unlock();
 							doneSignal3.countDown();
 						}
 					}
@@ -199,10 +208,6 @@ public class C45PartiallyConsolidatedPruneableClassifierTreeParallel extends C45
 				executorPool.submit(localInstanceAddTask);
 			}
 			doneSignal3.await();**/
-			//executorPool.shutdownNow();
-			
-			
-			//System.out.println("localInstanceVector length: " + localInstancesVector.size() + "\n");
 
 			/** Create the child nodes of the current node and call recursively to getNewTree() */
 			data = null;
@@ -232,6 +237,7 @@ public class C45PartiallyConsolidatedPruneableClassifierTreeParallel extends C45
 			}
 			doneSignal4.await();
 			//executorPool.shutdownNow();
+			
 				
 			/** Vector storing the subsamples related to the iSon-th son */
 			
@@ -332,8 +338,9 @@ public class C45PartiallyConsolidatedPruneableClassifierTreeParallel extends C45
 	 *
 	 * @param consolidationPercent percentage of the structure of the tree to leave without pruning 
 	 * @param numCore the number of threads going to be used leave the tree partially consolidated
+	 * @throws InterruptedException 
 	 */
-	public void leavePartiallyConsolidatedParallel(float consolidationPercent, int numCore) {
+	public void leavePartiallyConsolidatedParallel(float consolidationPercent, int numCore) throws InterruptedException {
 		// Number of internal nodes of the consolidated tree
 		int innerNodes = numNodes() - numLeaves();
 		// Number of nodes of the consolidated tree to leave as consolidated based on given consolidationPercent 
@@ -352,6 +359,9 @@ public class C45PartiallyConsolidatedPruneableClassifierTreeParallel extends C45
 			nodesConsoVector.add(this);
 			weightNodesConsoVector.add(localModel().distribution().total());
 		}
+		
+		ExecutorService executorPool = Executors.newFixedThreadPool(numCore);
+		
 		/** Determine which nodes will be left as consolidated according to their weight 
 		 *   starting from the root node */
 		while((nodesConsoVector.size() > 0) && (countNodesConso < numberNodesConso)){
@@ -374,9 +384,34 @@ public class C45PartiallyConsolidatedPruneableClassifierTreeParallel extends C45
 			// Increase the counter of consolidated nodes
 			countNodesConso++;
 		}
+		
+		final CountDownLatch pruningDoneSignal = new CountDownLatch(nodesConsoVector.size());
+		
+		final AtomicInteger numFailed = new AtomicInteger();
+		
 		/** Prune the rest of nodes (also on the base trees)*/
-		for(int iNode = 0; iNode < nodesConsoVector.size(); iNode++)
-			((C45PartiallyConsolidatedPruneableClassifierTreeParallel)nodesConsoVector.get(iNode)).setAsLeaf();
+		for(int iNode = 0; iNode < nodesConsoVector.size(); iNode++) {
+			
+			final int currentNode = iNode;
+			
+			Runnable PruningTask = new Runnable() {
+				public void run() {
+					try {
+						((C45PartiallyConsolidatedPruneableClassifierTreeParallel)nodesConsoVector.get(currentNode)).setAsLeaf();
+					} catch (Throwable e) {
+						e.printStackTrace();
+						numFailed.incrementAndGet();
+						System.out.println("Iteration " + currentNode + " failed!");
+					} finally {
+						pruningDoneSignal.countDown();
+					}
+				}
+			};
+			executorPool.submit(PruningTask);
+		}
+		pruningDoneSignal.await();
+	    executorPool.shutdownNow();
+			
 	}
 	
 	
