@@ -13,6 +13,7 @@ import weka.classifiers.Sourcable;
 import weka.classifiers.trees.j48.C45ModelSelection;
 import weka.classifiers.trees.j48.ModelSelection;
 import weka.classifiers.trees.j48Consolidated.C45ConsolidatedModelSelection;
+import weka.classifiers.trees.j48Consolidated.C45ConsolidatedModelSelectionParallel;
 import weka.classifiers.trees.j48Consolidated.InstancesConsolidated;
 import weka.classifiers.trees.j48PartiallyConsolidated.C45ModelSelectionExtended;
 import weka.classifiers.trees.j48PartiallyConsolidated.C45PartiallyConsolidatedPruneableClassifierTree;
@@ -135,7 +136,7 @@ public class J48PartiallyConsolidatedParallel
 			/** Set the model selection method to determine the consolidated decisions */
 		    ModelSelection modSelection;
 			// TODO Implement the option binarySplits of J48
-			modSelection = new C45ConsolidatedModelSelection(m_minNumObj, instances, 
+			modSelection = new C45ConsolidatedModelSelectionParallel(m_minNumObj, instances, 
 					m_useMDLcorrection, m_doNotMakeSplitPointActualValue);
 			/** Set the model selection method to force the consolidated decision in each base tree*/
 			C45ModelSelectionExtended baseModelToForceDecision = new C45ModelSelectionExtended(m_minNumObj, instances, 

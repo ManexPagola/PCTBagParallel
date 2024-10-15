@@ -15,12 +15,22 @@ public class C45ConsolidatedModelSelectionParallel extends C45ConsolidatedModelS
 	
 	private static final long serialVersionUID = 5464380024740285421L;
 	
+	protected ModelSelection m_toSelectModelToConsolidateParallel;
+	
 	public C45ConsolidatedModelSelectionParallel(int minNoObj, Instances allData,
 			boolean useMDLcorrection, boolean doNotMakeSplitPointActualValue) {
 		super(minNoObj, allData, useMDLcorrection, doNotMakeSplitPointActualValue);
 		
-		//m_toSelectModelToConsolidate = new C45ModelSelection(minNoObj, allData,
-				//useMDLcorrection, doNotMakeSplitPointActualValue);
+		m_toSelectModelToConsolidateParallel = new C45ConsolidatedModelSelection(minNoObj, allData,
+				useMDLcorrection, doNotMakeSplitPointActualValue);
+	}
+	
+	/**
+	 * Getter of m_toSelectModelToConsolidateParallel
+	 * @return the m_toSelectModelToConsolidateParallel
+	 */
+	public ModelSelection getModelToConsolidateParallel() {
+		return m_toSelectModelToConsolidateParallel;
 	}
 	
 	
@@ -57,7 +67,7 @@ public class C45ConsolidatedModelSelectionParallel extends C45ConsolidatedModelS
 			Runnable selectModelTask = new Runnable() {
 				public void run() {
 					try {
-						ClassifierSplitModel localModel = m_toSelectModelToConsolidate.selectModel(samplesVector[currentSample]);
+						ClassifierSplitModel localModel = m_toSelectModelToConsolidateParallel.selectModel(samplesVector[currentSample]);
 						if(localModel.numSubsets() > 1){
 							attIndexVector[currentSample] = ((C45Split) localModel).attIndex();
 							splitPointVector[currentSample] = ((C45Split) localModel).splitPoint();

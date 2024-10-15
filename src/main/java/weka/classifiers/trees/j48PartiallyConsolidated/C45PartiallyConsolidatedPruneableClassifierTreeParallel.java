@@ -22,11 +22,23 @@ public class C45PartiallyConsolidatedPruneableClassifierTreeParallel extends C45
 
 	private static final long serialVersionUID = -7742907782559492361L;
 	
+	/** Vector for storing the generated base decision trees
+	 *  related to each sample */
+	//protected C45PruneableClassifierTreeExtended[] m_sampleTreeVectorParallel;
+	
 	public C45PartiallyConsolidatedPruneableClassifierTreeParallel(ModelSelection toSelectLocModel,
 			C45ModelSelectionExtended baseModelToForceDecision, boolean pruneTree, float cf, boolean raiseTree,
 			boolean cleanup, boolean collapseTree, int numberSamples, boolean notPreservingStructure) throws Exception {
 		super(toSelectLocModel, baseModelToForceDecision, pruneTree, cf, raiseTree, cleanup, collapseTree, numberSamples,
 				notPreservingStructure);
+		
+		// Initialize each base decision tree of the vector
+		ModelSelection modelToConsolidate = ((C45ConsolidatedModelSelectionParallel)toSelectLocModel).getModelToConsolidateParallel();
+		m_sampleTreeVector = new C45PruneableClassifierTreeExtended[numberSamples];
+		for (int iSample = 0; iSample < numberSamples; iSample++)
+			m_sampleTreeVector[iSample] = new C45PruneableClassifierTreeExtended(
+					modelToConsolidate,	baseModelToForceDecision, pruneTree, cf, raiseTree, cleanup, collapseTree,
+					notPreservingStructure);
 	}
 	
 	
@@ -49,10 +61,10 @@ public class C45PartiallyConsolidatedPruneableClassifierTreeParallel extends C45
 			collapse();
 		}
 		if (m_pruneTheTree) {
-			prune();
+			pruneParallel();
 		}
 		long startTimePC = System.nanoTime();
-		leavePartiallyConsolidated(consolidationPercent);
+		leavePartiallyConsolidatedParallel(consolidationPercent, numCore);
 		long endTimePC = System.nanoTime();
 		
 		long startTimeBagging = System.nanoTime();
@@ -64,10 +76,10 @@ public class C45PartiallyConsolidatedPruneableClassifierTreeParallel extends C45
 		long execTimeBagging = (endTimeBagging - startTimeBagging) / 1000;
 		long totalTime = execTimeBT + execTimePC + execTimeBagging;
 		
-		System.out.println("Zuhaitzaren eraiketak " + execTimeBT + " us behar izan ditu \n");
+		//System.out.println("Zuhaitzaren eraiketak " + execTimeBT + " us behar izan ditu \n");
 		//System.out.println("Kontsolidazio partzialaren exekuzioak " + execTimePC + " us behar izan ditu \n");
 		//System.out.println("Bagging-en exekuzioak " + execTimeBagging + " us behar izan ditu \n");
-		//System.out.println("Exekuzio denbora guztira: " + totalTime + " us \n");
+		System.out.println("Exekuzio denbora guztira: " + totalTime + " us \n");
 		
 		
 		if (m_cleanup)
@@ -132,7 +144,7 @@ public class C45PartiallyConsolidatedPruneableClassifierTreeParallel extends C45
 	    //executorPool.shutdownNow();
 
 		/** Select the best model to split (if it is worth) based on the consolidation process */
-		m_localModel = ((C45ConsolidatedModelSelection)m_toSelectModel).selectModelParallel(data, samplesVector, numCore);
+		m_localModel = ((C45ConsolidatedModelSelectionParallel)m_toSelectModel).selectModelParallel(data, samplesVector, numCore);
 		
 		final CountDownLatch doneSignal2 = new CountDownLatch(numberSamples);
 		
@@ -294,8 +306,8 @@ public class C45PartiallyConsolidatedPruneableClassifierTreeParallel extends C45
 								localSamplesVector[iSample] =
 								((Instances[]) localInstancesVector.get(iSample))[currentSon];
 								
-							m_sons[currentSon] = (C45PartiallyConsolidatedPruneableClassifierTree)getNewTree(
-										currentLocalInstances[currentSon], localSamplesVector, m_sampleTreeVector, currentSon);
+							m_sons[currentSon] = (C45PartiallyConsolidatedPruneableClassifierTree)getNewTreeParallel(
+										currentLocalInstances[currentSon], localSamplesVector, m_sampleTreeVector, currentSon, numCore);
 
 							currentLocalInstances[currentSon] = null;
 							localSamplesVector = null;
@@ -331,6 +343,92 @@ public class C45PartiallyConsolidatedPruneableClassifierTreeParallel extends C45
 		executorPool.shutdownNow();
 	}
 	
+	/**
+	 * Returns a newly created tree.
+	 *
+	 * @param data the data to work with
+	 * @param samplesVector the vector of samples for building the consolidated tree
+	 * @param numCore the number of threads going to be used to build the tree in parallel
+	 * @return the new consolidated tree
+	 * @throws Exception if something goes wrong
+	 */
+	protected ClassifierTree getNewTreeParallel(Instances data, Instances[] samplesVector,
+			ClassifierTree[] sampleTreeVectorParent, int iSon, int numCore) throws Exception {
+		/** Number of Samples. */
+		int numberSamples = samplesVector.length;
+
+		C45ModelSelectionExtended baseModelToForceDecision = m_sampleTreeVector[0].getBaseModelToForceDecision();
+		C45PartiallyConsolidatedPruneableClassifierTreeParallel newTree =
+				new C45PartiallyConsolidatedPruneableClassifierTreeParallel(m_toSelectModel, baseModelToForceDecision,
+						m_pruneTheTree, m_CF, m_subtreeRaising, m_cleanup, m_collapseTheTree , samplesVector.length,
+						m_pruneBaseTreesWithoutPreservingConsolidatedStructure);
+		/** Set the recent created base trees like the sons of the given parent node */
+		for (int iSample = 0; iSample < numberSamples; iSample++)
+			((C45PruneableClassifierTreeExtended)sampleTreeVectorParent[iSample]).setIthSon(iSon, newTree.m_sampleTreeVector[iSample]);
+		newTree.buildTreeParallel(data, samplesVector, m_subtreeRaising, numCore);
+
+		return newTree;
+	}
+	
+	/**
+	 * Prunes the consolidated tree using C4.5's pruning procedure, and all base trees in the same way
+	 *
+	 * @throws Exception if something goes wrong
+	 */
+	public void pruneParallel() throws Exception {
+
+		double errorsLargestBranch;
+		double errorsLeaf;
+		double errorsTree;
+		int indexOfLargestBranch;
+		C45PartiallyConsolidatedPruneableClassifierTreeParallel largestBranch;
+		int i;
+
+		if (!m_isLeaf){
+
+			// Prune all subtrees.
+			for (i=0;i<m_sons.length;i++)
+				son(i).prune();
+
+			// Compute error for largest branch
+			indexOfLargestBranch = localModel().distribution().maxBag();
+			if (m_subtreeRaising) {
+				errorsLargestBranch = ((C45PartiallyConsolidatedPruneableClassifierTreeParallel)(son(indexOfLargestBranch))).
+						getEstimatedErrorsForBranch((Instances)m_train);
+			} else {
+				errorsLargestBranch = Double.MAX_VALUE;
+			}
+
+			// Compute error if this Tree would be leaf
+			errorsLeaf = 
+					getEstimatedErrorsForDistribution(localModel().distribution());
+
+			// Compute error for the whole subtree
+			errorsTree = getEstimatedErrors();
+
+			// Decide if leaf is best choice.
+			if (Utils.smOrEq(errorsLeaf,errorsTree+0.1) &&
+					Utils.smOrEq(errorsLeaf,errorsLargestBranch+0.1)){
+				setAsLeaf();
+				return;
+			}
+
+			// Decide if largest branch is better choice
+			// than whole subtree.
+			if (Utils.smOrEq(errorsLargestBranch,errorsTree+0.1)){
+				largestBranch = (C45PartiallyConsolidatedPruneableClassifierTreeParallel)son(indexOfLargestBranch);
+				m_sons = largestBranch.m_sons;
+				m_localModel = largestBranch.localModel();
+				m_isLeaf = largestBranch.m_isLeaf;
+				newDistribution(m_train);
+				// Replace current node with the largest branch in all base trees
+				for (int iSample=0; iSample < m_sampleTreeVector.length; iSample++)
+					m_sampleTreeVector[iSample].replaceWithIthSubtree(indexOfLargestBranch);
+				pruneParallel();
+			}
+		}
+	}
+	
 	
 	
 	/**
@@ -338,9 +436,9 @@ public class C45PartiallyConsolidatedPruneableClassifierTreeParallel extends C45
 	 *
 	 * @param consolidationPercent percentage of the structure of the tree to leave without pruning 
 	 * @param numCore the number of threads going to be used leave the tree partially consolidated
-	 * @throws InterruptedException 
+	 * @throws Exception if something goes wrong
 	 */
-	public void leavePartiallyConsolidatedParallel(float consolidationPercent, int numCore) throws InterruptedException {
+	public void leavePartiallyConsolidatedParallel(float consolidationPercent, int numCore) throws Exception {
 		// Number of internal nodes of the consolidated tree
 		int innerNodes = numNodes() - numLeaves();
 		// Number of nodes of the consolidated tree to leave as consolidated based on given consolidationPercent 
@@ -456,6 +554,6 @@ public class C45PartiallyConsolidatedPruneableClassifierTreeParallel extends C45
 	    executorPool.shutdownNow();
 	}
 	
-	
+
 
 }
