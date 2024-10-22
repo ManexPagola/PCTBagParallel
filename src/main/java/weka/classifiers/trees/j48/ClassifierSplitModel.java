@@ -22,6 +22,11 @@
 package weka.classifiers.trees.j48;
 
 import java.io.Serializable;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.ReentrantLock;
 
 import weka.core.Instance;
 import weka.core.Instances;
@@ -290,6 +295,98 @@ public abstract class ClassifierSplitModel
     
     return instances;
   }
+  
+  /**
+   * Splits the given set of instances into subsets concurrently.
+   *
+   * @exception Exception if something goes wrong
+   */
+ /** public Instances [] splitParallel(Instances data, int numCore) throws Exception { 
+	  
+	ExecutorService executorPool = Executors.newFixedThreadPool(numCore);
+		
+	final CountDownLatch doneSignal = new CountDownLatch(data.size());
+		
+	final AtomicInteger numFailed = new AtomicInteger();
+
+    // Find size and constitution of subsets
+    int[] subsetSize = new int[m_numSubsets];
+    for (Instance instance : data) {
+      Runnable subsetSizeTask = new Runnable() {
+    	  public void run() {
+    		  try {
+    			  int subset = whichSubset(instance);
+    		      if (subset > -1) {
+    		        subsetSize[subset]++;
+    		      } else {
+    		        double[] weights = weights(instance);
+    		        for (int j = 0; j < m_numSubsets; j++) {
+    		          if (Utils.gr(weights[j], 0)) {
+    		            subsetSize[j]++;
+    		          }
+    		        }
+    		      }
+    		  } catch(Throwable e) {
+    			e.printStackTrace();
+				numFailed.incrementAndGet();
+				System.out.println("SplitParallel failed!");
+    		  } finally {
+    			  doneSignal.countDown();
+    		  }
+    	  }
+      };
+      executorPool.submit(subsetSizeTask);
+    }
+    doneSignal.await();
+    
+    final CountDownLatch doneSignal2 = new CountDownLatch(data.size());
+    ReentrantLock lock = new ReentrantLock();
+    ReentrantLock lock2 = new ReentrantLock();
+    
+    // Create subsets
+    Instances [] instances = new Instances [m_numSubsets];
+    for (int j = 0; j < m_numSubsets; j++) {
+      instances[j] = new Instances(data, subsetSize[j]);
+    }
+    for (Instance instance : data) {
+    	Runnable setWeightTask = new Runnable() {
+    		public void run() {
+    			try {
+    				int subset = whichSubset(instance);
+    			      if (subset > -1) {
+    			    lock.lock();
+    				instances[subset].add(instance);
+    				lock.unlock();
+    			      } else {
+    			        double[] weights = weights(instance);
+    			        for (int j = 0; j < m_numSubsets; j++) {
+    				  if (Utils.gr(weights[j], 0)) {
+    					lock2.lock();
+    				    instances[j].add(instance);
+    				    lock2.unlock();
+    				    instances[j].lastInstance().
+    				      setWeight(weights[j] * instance.weight());
+    				  }
+    				}
+    			      }
+    			} catch(Throwable e) {
+    				e.printStackTrace();
+    				numFailed.incrementAndGet();
+    				System.out.println("setWeight failed!");
+    			} finally {
+    				doneSignal2.countDown();
+    			}
+    		}
+    	};
+      executorPool.submit(setWeightTask);
+    }
+    doneSignal2.await();
+    
+    
+    executorPool.shutdown();
+    
+    return instances;
+  }**/
 
   /**
    * Returns weights if instance is assigned to more than one subset.

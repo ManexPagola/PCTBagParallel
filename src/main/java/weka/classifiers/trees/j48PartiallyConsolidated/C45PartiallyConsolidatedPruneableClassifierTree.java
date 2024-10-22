@@ -91,12 +91,16 @@ public class C45PartiallyConsolidatedPruneableClassifierTree extends
 		long startTimeBT = System.nanoTime();
 		buildTree(data, samplesVector, m_subtreeRaising || !m_cleanup);
 		long endTimeBT = System.nanoTime();
+		
+		long startTimeCoPr = System.nanoTime();
 		if (m_collapseTheTree) {
 			collapse();
 		}
 		if (m_pruneTheTree) {
 			prune();
 		}
+		long endTimeCoPr = System.nanoTime();
+		
 		long startTimePC = System.nanoTime();
 		leavePartiallyConsolidated(consolidationPercent);
 		long endTimePC = System.nanoTime();
@@ -106,11 +110,13 @@ public class C45PartiallyConsolidatedPruneableClassifierTree extends
 		long endTimeBagging = System.nanoTime();
 		
 		long execTimeBT = (endTimeBT - startTimeBT) / 1000;
+		long execTimeCoPr = (endTimeCoPr - startTimeCoPr) / 1000;
 		long execTimePC = (endTimePC - startTimePC) / 1000;
 		long execTimeBagging = (endTimeBagging - startTimeBagging) / 1000;
 		long totalTime = execTimeBT + execTimePC + execTimeBagging;
 		
 		//System.out.println("Zuhaitzaren eraiketak " + execTimeBT + " us behar izan ditu \n");
+		//System.out.println("Zuhaitzaren kolapso eta inausketak " + execTimeCoPr + " us behar izan ditu \n");
 		//System.out.println("Kontsolidazio partzialaren exekuzioak " + execTimePC + " us behar izan ditu \n");
 		//System.out.println("Bagging-en exekuzioak " + execTimeBagging + " us behar izan ditu \n");
 		System.out.println("Exekuzio denbora guztira: " + totalTime + " us \n");

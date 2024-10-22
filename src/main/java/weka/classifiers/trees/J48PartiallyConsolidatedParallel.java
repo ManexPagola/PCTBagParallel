@@ -98,7 +98,7 @@ public class J48PartiallyConsolidatedParallel
 	}*/
 	
 	/**
-	 * Klasifikatzailea eraikitzen du paraleloan / Builds classifier concurrently
+	 * Klasifikatzailea eraikitzen du serie edo paraleloan/ Builds classifier serial or concurrently
 	 * 
 	 * @param instances the data to train the classifier with 
 	 * @throws Exception if classifier can't be built successfully

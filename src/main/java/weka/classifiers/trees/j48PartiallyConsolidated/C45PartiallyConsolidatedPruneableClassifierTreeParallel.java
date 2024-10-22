@@ -57,12 +57,16 @@ public class C45PartiallyConsolidatedPruneableClassifierTreeParallel extends C45
 		long startTimeBT = System.nanoTime();
 		buildTreeParallel(data, samplesVector, m_subtreeRaising || !m_cleanup, numCore);
 		long endTimeBT = System.nanoTime();
+		
+		long startTimeCoPr = System.nanoTime();
 		if (m_collapseTheTree) {
-			collapse();
+			collapseParallel();
 		}
 		if (m_pruneTheTree) {
 			pruneParallel();
 		}
+		long endTimeCoPr = System.nanoTime();
+		
 		long startTimePC = System.nanoTime();
 		leavePartiallyConsolidatedParallel(consolidationPercent, numCore);
 		long endTimePC = System.nanoTime();
@@ -72,11 +76,13 @@ public class C45PartiallyConsolidatedPruneableClassifierTreeParallel extends C45
 		long endTimeBagging = System.nanoTime();
 		
 		long execTimeBT = (endTimeBT - startTimeBT) / 1000;
+		long execTimeCoPr = (endTimeCoPr - startTimeCoPr) / 1000;
 		long execTimePC = (endTimePC - startTimePC) / 1000;
 		long execTimeBagging = (endTimeBagging - startTimeBagging) / 1000;
 		long totalTime = execTimeBT + execTimePC + execTimeBagging;
 		
 		//System.out.println("Zuhaitzaren eraiketak " + execTimeBT + " us behar izan ditu \n");
+		//System.out.println("Zuhaitzaren kolapso eta inausketak " + execTimeCoPr + " us behar izan ditu \n");
 		//System.out.println("Kontsolidazio partzialaren exekuzioak " + execTimePC + " us behar izan ditu \n");
 		//System.out.println("Bagging-en exekuzioak " + execTimeBagging + " us behar izan ditu \n");
 		System.out.println("Exekuzio denbora guztira: " + totalTime + " us \n");
@@ -184,6 +190,7 @@ public class C45PartiallyConsolidatedPruneableClassifierTreeParallel extends C45
 			for (int iSample = 0; iSample < numberSamples; iSample++)
 				if (Utils.eq(m_sampleTreeVector[iSample].getLocalModel().distribution().total(), 0))
 					m_sampleTreeVector[iSample].setIsEmpty(true);
+			
 			
 			/** Split data according to the consolidated m_localModel */
 			localInstances = m_localModel.split(data);
@@ -371,6 +378,55 @@ public class C45PartiallyConsolidatedPruneableClassifierTreeParallel extends C45
 	}
 	
 	/**
+	 * Collapses a tree to a node if training error doesn't increase.
+	 * And also each tree of a tree vector to a node.
+	 * 
+	 *  @throws Exception if something goes wrong
+	 */
+	public final void collapseParallel() throws Exception{
+	
+		double errorsOfSubtree;
+		double errorsOfTree;
+		int i;
+		
+		//ExecutorService executorPool = Executors.newFixedThreadPool(numCore);
+		
+		//final CountDownLatch doneSignal = new CountDownLatch(m_sons.length);
+		
+		//final AtomicInteger numFailed = new AtomicInteger();
+	
+		if (!m_isLeaf){
+			errorsOfSubtree = getTrainingErrors();
+			errorsOfTree = localModel().distribution().numIncorrect();
+			if (errorsOfSubtree >= errorsOfTree-1E-3)
+				setAsLeaf();
+			else
+				for (i=0;i<m_sons.length;i++)
+					son(i).collapse();
+				/**for (i=0;i<m_sons.length;i++) {
+					
+					final int currentSon = i;
+					
+					Runnable collapseTask = new Runnable() {
+						public void run() {
+							try {
+								son(currentSon).collapse();
+							} catch(Throwable e) {
+								e.printStackTrace();
+								numFailed.incrementAndGet();
+								System.out.println("Iteration " + currentSon + " failed!");
+							} finally {
+								doneSignal.countDown();
+							}
+						}
+					};
+					executorPool.submit(collapseTask);
+				}
+			doneSignal.await();**/
+		}
+	}
+	
+	/**
 	 * Prunes the consolidated tree using C4.5's pruning procedure, and all base trees in the same way
 	 *
 	 * @throws Exception if something goes wrong
@@ -383,13 +439,40 @@ public class C45PartiallyConsolidatedPruneableClassifierTreeParallel extends C45
 		int indexOfLargestBranch;
 		C45PartiallyConsolidatedPruneableClassifierTreeParallel largestBranch;
 		int i;
+		
+		//ExecutorService executorPool = Executors.newFixedThreadPool(numCore);
+		
+		//final CountDownLatch doneSignal = new CountDownLatch(m_sons.length);
+		
+		//final AtomicInteger numFailed = new AtomicInteger();
 
 		if (!m_isLeaf){
 
 			// Prune all subtrees.
 			for (i=0;i<m_sons.length;i++)
 				son(i).prune();
-
+			
+			/**for (i=0;i<m_sons.length;i++) {
+				
+				final int currentSon = i;
+				
+				Runnable sonPruneTask = new Runnable() {
+					public void run() {
+						try {
+							son(currentSon).prune();
+						} catch(Throwable e) {
+							e.printStackTrace();
+							numFailed.incrementAndGet();
+							System.out.println("Iteration " + currentSon + " failed!");
+						} finally {
+							doneSignal.countDown();
+						}
+					}
+				};
+				executorPool.submit(sonPruneTask);
+			}
+			doneSignal.await();**/
+				
 			// Compute error for largest branch
 			indexOfLargestBranch = localModel().distribution().maxBag();
 			if (m_subtreeRaising) {
@@ -421,10 +504,35 @@ public class C45PartiallyConsolidatedPruneableClassifierTreeParallel extends C45
 				m_localModel = largestBranch.localModel();
 				m_isLeaf = largestBranch.m_isLeaf;
 				newDistribution(m_train);
+				
 				// Replace current node with the largest branch in all base trees
 				for (int iSample=0; iSample < m_sampleTreeVector.length; iSample++)
 					m_sampleTreeVector[iSample].replaceWithIthSubtree(indexOfLargestBranch);
 				pruneParallel();
+				
+				
+				/**final CountDownLatch doneSignal2 = new CountDownLatch(m_sampleTreeVector.length);
+				for (int iSample=0; iSample < m_sampleTreeVector.length; iSample++) {
+					
+					final int currentSample = iSample;
+					
+					Runnable replaceSubtreeTask = new Runnable() {
+						public void run() {
+							try {
+								m_sampleTreeVector[currentSample].replaceWithIthSubtree(indexOfLargestBranch);
+							} catch(Throwable e) {
+								e.printStackTrace();
+								numFailed.incrementAndGet();
+								System.out.println("Iteration " + currentSample + " failed!");
+							} finally {
+								doneSignal2.countDown();
+							}
+						}
+					};
+					executorPool.submit(replaceSubtreeTask);
+				}
+				doneSignal2.await();**/
+				
 			}
 		}
 	}

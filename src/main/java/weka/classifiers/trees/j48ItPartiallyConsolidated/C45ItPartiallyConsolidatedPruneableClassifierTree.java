@@ -38,16 +38,16 @@ public class C45ItPartiallyConsolidatedPruneableClassifierTree extends C45Partia
 	private static final long serialVersionUID = 6410655550027990502L;
 
 	/** Indicates the order in which the node was treated */
-	private int m_order;
+	protected int m_order;
 
 	/**
 	 * Builds the tree up to a maximum of depth levels. Set m_maximumLevel to 0 for
 	 * default.
 	 */
-	private int m_maximumCriteria;
+	protected int m_maximumCriteria;
 
 	/** Indicates the criteria that should be used to build the tree */
-	private int m_priorityCriteria;
+	protected int m_priorityCriteria;
 
 	/** True if the partial Consolidated tree(CT) is to be pruned. */
 	protected boolean m_pruneTheConsolidatedTree = false;

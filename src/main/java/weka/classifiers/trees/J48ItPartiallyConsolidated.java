@@ -225,7 +225,7 @@ public class J48ItPartiallyConsolidated
 
 	};
 	
-	private int m_ITPCTpriorityCriteria = Original;
+	protected int m_ITPCTpriorityCriteria = Original;
 	
 	/** Ways to set the consolidationNumber option */
 	public static final int ConsolidationNumber_Value = 1;
@@ -239,13 +239,13 @@ public class J48ItPartiallyConsolidated
 		
 	/** Selected way to set the number of samples to be generated; or using a fixed value;
 	 *   or based on a coverage value as a percentage (by default). */
-	private int m_ITPCTconsolidationPercentHowToSet = ConsolidationNumber_Percentage;
+	protected int m_ITPCTconsolidationPercentHowToSet = ConsolidationNumber_Percentage;
 	
 	/** Unpruned partial Consolidated Tree (CT)? */
-	private boolean m_ITPCTunprunedCT = true;
+	protected boolean m_ITPCTunprunedCT = true;
 	
 	/** Collapse partial Consolidated Tree (CT)? */
-	private boolean m_ITPCTcollapseCT = false;
+	protected boolean m_ITPCTcollapseCT = false;
 	
 	/**
 	 * Returns a string describing the classifier
