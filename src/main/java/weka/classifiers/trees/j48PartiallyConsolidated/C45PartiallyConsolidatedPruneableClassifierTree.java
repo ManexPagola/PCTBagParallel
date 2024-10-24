@@ -306,6 +306,8 @@ public class C45PartiallyConsolidatedPruneableClassifierTree extends
 			localInstances = m_localModel.split(data);
 			for (int iSample = 0; iSample < numberSamples; iSample++)
 				localInstancesVector.add(m_localModel.split(samplesVector[iSample]));
+			
+		
 
 			/** Create the child nodes of the current node and call recursively to getNewTree() */
 			data = null;

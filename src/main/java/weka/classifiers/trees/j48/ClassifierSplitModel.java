@@ -301,7 +301,7 @@ public abstract class ClassifierSplitModel
    *
    * @exception Exception if something goes wrong
    */
- /** public Instances [] splitParallel(Instances data, int numCore) throws Exception { 
+  public Instances [] splitParallel(Instances data, int numCore) throws Exception { 
 	  
 	ExecutorService executorPool = Executors.newFixedThreadPool(numCore);
 		
@@ -386,7 +386,7 @@ public abstract class ClassifierSplitModel
     executorPool.shutdown();
     
     return instances;
-  }**/
+  }
 
   /**
    * Returns weights if instance is assigned to more than one subset.
