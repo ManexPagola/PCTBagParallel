@@ -79,12 +79,12 @@ public class C45PartiallyConsolidatedPruneableClassifierTreeParallel extends C45
 		long execTimeCoPr = (endTimeCoPr - startTimeCoPr) / 1000;
 		long execTimePC = (endTimePC - startTimePC) / 1000;
 		long execTimeBagging = (endTimeBagging - startTimeBagging) / 1000;
-		long totalTime = execTimeBT + execTimePC + execTimeBagging;
+		long totalTime = execTimeBT + execTimeCoPr + execTimePC + execTimeBagging;
 		
-		//System.out.println("Zuhaitzaren eraiketak " + execTimeBT + " us behar izan ditu \n");
+		System.out.println("Zuhaitzaren eraiketak " + execTimeBT + " us behar izan ditu \n");
 		//System.out.println("Zuhaitzaren kolapso eta inausketak " + execTimeCoPr + " us behar izan ditu \n");
-		//System.out.println("Kontsolidazio partzialaren exekuzioak " + execTimePC + " us behar izan ditu \n");
-		//System.out.println("Bagging-en exekuzioak " + execTimeBagging + " us behar izan ditu \n");
+		System.out.println("Kontsolidazio partzialaren exekuzioak " + execTimePC + " us behar izan ditu \n");
+		System.out.println("Bagging-en exekuzioak " + execTimeBagging + " us behar izan ditu \n");
 		System.out.println("Exekuzio denbora guztira: " + totalTime + " us \n");
 		
 		
@@ -185,7 +185,7 @@ public class C45PartiallyConsolidatedPruneableClassifierTreeParallel extends C45
 			//ArrayList<Instances[]> localInstancesVector = new ArrayList<Instances[]>();
 			//ensureSize(localInstancesVector, numberSamples);
 			
-			final Instances[][] localInstancesMatrix = new Instances[numberSamples][];
+			Instances[][] localInstancesMatrix = new Instances[numberSamples][];
 			
 			/** For some base trees, although the current node is not a leaf, it could be empty.
 			 *  This is necessary in order to calculate correctly the class membership probabilities
@@ -205,6 +205,7 @@ public class C45PartiallyConsolidatedPruneableClassifierTreeParallel extends C45
 			final CountDownLatch doneSignal3 = new CountDownLatch(numberSamples);
 			
 			final Instances[] currentSamplesVector = samplesVector;
+			final Instances[][] currentLocalInstancesMatrix = localInstancesMatrix;
 			
 			for (int iSample = 0; iSample < numberSamples; iSample++) {
 				
@@ -214,9 +215,7 @@ public class C45PartiallyConsolidatedPruneableClassifierTreeParallel extends C45
 					public void run() {
 						try {
 							Instances[] currentInstance = m_localModel.split(currentSamplesVector[nSample]);
-							localInstancesMatrix[nSample] = currentInstance;
-							
-						
+							currentLocalInstancesMatrix[nSample] = currentInstance;
 						} catch(Throwable e) {
 							e.printStackTrace();
 							numFailed.incrementAndGet();
@@ -261,39 +260,44 @@ public class C45PartiallyConsolidatedPruneableClassifierTreeParallel extends C45
 			//executorPool.shutdownNow();
 			
 				
-			/** Vector storing the subsamples related to the iSon-th son */
+			/**INNER LOOP PARALLELIZATION (WORKING)**/
 			
-			
-			/**Instances[] localSamplesVector = new Instances[numberSamples];
-			 * 
-			 * INNER LOOP PARALLELIZATION (NOT WORKING)
-			
-			final CountDownLatch doneSignal4 = new CountDownLatch(numberSamples);
-			
-			for (int iSample = 0; iSample < numberSamples; iSample++) {
+			/**for (int iSon = 0; iSon < m_sons.length; iSon++) {
 				
-				final int currentSample = iSample;
-				final int currentSon = iSon;
+				final CountDownLatch doneSignal5 = new CountDownLatch(numberSamples);
+				
+				//Vector storing the subsamples related to the iSon-th son 
+				Instances[] localSamplesVector = new Instances[numberSamples];
 				final Instances[] currentLocalSamplesVector = localSamplesVector;
 				
-				Runnable localSonTask = new Runnable() {
-					public void run() {
-						try {
-							currentLocalSamplesVector[currentSample] =
-									((Instances[]) localInstancesVector.get(currentSample))[currentSon];
-						} catch (Throwable e) {
-							e.printStackTrace();
-							numFailed.incrementAndGet();
-							System.out.println("Iteration " + currentSample + "of son " + currentSon + " failed!");
-						} finally {
-							doneSignal4.countDown();
+				for (int iSample = 0; iSample < numberSamples; iSample++) {
+					
+					final int currentSon = iSon;
+					final int currentSample = iSample;
+					
+					Runnable getNewTreeTask = new Runnable() {
+						public void run() {
+							try {
+								currentLocalSamplesVector[currentSample] = localInstancesMatrix[currentSample][currentSon];
+							} catch(Throwable e) {
+								e.printStackTrace();
+								numFailed.incrementAndGet();
+								System.out.println("Iteration " + currentSample + " of getNewTreeTask failed!");
+							} finally {
+								doneSignal5.countDown();
+							}
 						}
-					}
-				};
-				executorPool.submit(localSonTask);
-			}
-			doneSignal4.await();	
-			executorPool.shutdownNow();**/
+					};
+					executorPool.submit(getNewTreeTask);
+				}
+				doneSignal5.await();
+				
+				m_sons[iSon] = (C45PartiallyConsolidatedPruneableClassifierTree)getNewTreeParallel(
+									localInstances[iSon], localSamplesVector, m_sampleTreeVector, iSon, numCore);
+
+				localInstances[iSon] = null;
+				localSamplesVector = null;
+			}**/
 			
 			
 			
@@ -313,9 +317,7 @@ public class C45PartiallyConsolidatedPruneableClassifierTreeParallel extends C45
 							//Vector storing the subsamples related to the iSon-th son
 							Instances[] localSamplesVector = new Instances[numberSamples];
 							for (int iSample = 0; iSample < numberSamples; iSample++)
-								localSamplesVector[iSample] = localInstancesMatrix[iSample][currentSon];
-								//localSamplesVector[iSample] =
-								//((Instances[]) localInstancesVector.get(iSample))[currentSon];
+								localSamplesVector[iSample] = currentLocalInstancesMatrix[iSample][currentSon];
 								
 							m_sons[currentSon] = (C45PartiallyConsolidatedPruneableClassifierTree)getNewTreeParallel(
 										currentLocalInstances[currentSon], localSamplesVector, m_sampleTreeVector, currentSon, numCore);
@@ -336,9 +338,9 @@ public class C45PartiallyConsolidatedPruneableClassifierTreeParallel extends C45
 			doneSignal5.await();
 			
 			
+			
 			localInstances = null;
-			//localInstancesVector.clear();
-			//localInstancesMatrix = null;
+			localInstancesMatrix = null;
 		}else{
 			m_isLeaf = true;
 			for (int iSample = 0; iSample < numberSamples; iSample++)
@@ -571,7 +573,7 @@ public class C45PartiallyConsolidatedPruneableClassifierTreeParallel extends C45
 			weightNodesConsoVector.add(localModel().distribution().total());
 		}
 		
-		ExecutorService executorPool = Executors.newFixedThreadPool(numCore);
+		//ExecutorService executorPool = Executors.newFixedThreadPool(numCore);
 		
 		/** Determine which nodes will be left as consolidated according to their weight 
 		 *   starting from the root node */
@@ -596,11 +598,14 @@ public class C45PartiallyConsolidatedPruneableClassifierTreeParallel extends C45
 			countNodesConso++;
 		}
 		
-		final CountDownLatch pruningDoneSignal = new CountDownLatch(nodesConsoVector.size());
+		for(int iNode = 0; iNode < nodesConsoVector.size(); iNode++)
+			((C45PartiallyConsolidatedPruneableClassifierTreeParallel)nodesConsoVector.get(iNode)).setAsLeaf();
+		
+		/**final CountDownLatch pruningDoneSignal = new CountDownLatch(nodesConsoVector.size());
 		
 		final AtomicInteger numFailed = new AtomicInteger();
 		
-		/** Prune the rest of nodes (also on the base trees)*/
+		//Prune the rest of nodes (also on the base trees)
 		for(int iNode = 0; iNode < nodesConsoVector.size(); iNode++) {
 			
 			final int currentNode = iNode;
@@ -621,7 +626,7 @@ public class C45PartiallyConsolidatedPruneableClassifierTreeParallel extends C45
 			executorPool.submit(PruningTask);
 		}
 		pruningDoneSignal.await();
-	    executorPool.shutdownNow();
+	    executorPool.shutdownNow();**/
 			
 	}
 	

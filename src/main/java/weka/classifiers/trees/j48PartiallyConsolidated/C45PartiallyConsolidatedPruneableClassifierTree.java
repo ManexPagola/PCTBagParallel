@@ -113,12 +113,12 @@ public class C45PartiallyConsolidatedPruneableClassifierTree extends
 		long execTimeCoPr = (endTimeCoPr - startTimeCoPr) / 1000;
 		long execTimePC = (endTimePC - startTimePC) / 1000;
 		long execTimeBagging = (endTimeBagging - startTimeBagging) / 1000;
-		long totalTime = execTimeBT + execTimePC + execTimeBagging;
+		long totalTime = execTimeBT + execTimeCoPr + execTimePC + execTimeBagging;
 		
-		//System.out.println("Zuhaitzaren eraiketak " + execTimeBT + " us behar izan ditu \n");
+		System.out.println("Zuhaitzaren eraiketak " + execTimeBT + " us behar izan ditu \n");
 		//System.out.println("Zuhaitzaren kolapso eta inausketak " + execTimeCoPr + " us behar izan ditu \n");
-		//System.out.println("Kontsolidazio partzialaren exekuzioak " + execTimePC + " us behar izan ditu \n");
-		//System.out.println("Bagging-en exekuzioak " + execTimeBagging + " us behar izan ditu \n");
+		System.out.println("Kontsolidazio partzialaren exekuzioak " + execTimePC + " us behar izan ditu \n");
+		System.out.println("Bagging-en exekuzioak " + execTimeBagging + " us behar izan ditu \n");
 		System.out.println("Exekuzio denbora guztira: " + totalTime + " us \n");
 		
 		if (m_cleanup)

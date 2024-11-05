@@ -23,7 +23,9 @@ public class C45ItPartiallyConsolidatedPruneableClassifierTreeParallel extends C
 
 	private static final long serialVersionUID = -3300820617594466879L;
 	
+	protected ModelSelection m_modSelection;
 	protected C45ModelSelectionExtended m_baseModelToForceDecision;
+	
 	
 	
 	/**
@@ -50,6 +52,7 @@ public class C45ItPartiallyConsolidatedPruneableClassifierTreeParallel extends C
 		super(toSelectLocModel, baseModelToForceDecision, pruneTree, cf, raiseTree, cleanup, collapseTree, numberSamples,
 				notPreservingStructure, ITPCTpriorityCriteria, pruneCT, collapseCT);
 		
+		m_modSelection = toSelectLocModel;
 		m_baseModelToForceDecision = baseModelToForceDecision;
 	}
 	
@@ -73,35 +76,40 @@ public class C45ItPartiallyConsolidatedPruneableClassifierTreeParallel extends C
 
 			m_pruneTheTree = m_pruneTheConsolidatedTree;
 			m_collapseTheTree = m_collapseTheCTree;
-			C45PartiallyConsolidatedPruneableClassifierTreeParallel originalParallelTree = new C45PartiallyConsolidatedPruneableClassifierTreeParallel(m_toSelectModel, 
-					this.m_baseModelToForceDecision, this.m_pruneTheTree, this.m_CF, this.m_subtreeRaising, this.m_cleanup, this.m_collapseTheTree, 
+			C45PartiallyConsolidatedPruneableClassifierTreeParallel originalParallelTree = new C45PartiallyConsolidatedPruneableClassifierTreeParallel(m_modSelection, 
+					this.m_baseModelToForceDecision, !this.m_pruneTheTree, this.m_CF, this.m_subtreeRaising, this.m_cleanup, !this.m_collapseTheTree, 
 					samplesVector.length, this.m_pruneBaseTreesWithoutPreservingConsolidatedStructure);
 			//super.buildClassifier(data, samplesVector, consolidationPercent);
 			originalParallelTree.buildClassifierParallel(data, samplesVector, consolidationPercent, numCore);
-			
-			
+			this.m_localModel = originalParallelTree.getLocalModel();
+			this.m_sampleTreeVector = (C45PruneableClassifierTreeExtended[]) originalParallelTree.getSampleTreeVector();			
 
 		} else {
 			if (consolidationNumberHowToSet == J48ItPartiallyConsolidated.ConsolidationNumber_Percentage) {
-								
-				trainTimeStart = System.currentTimeMillis();
+					
+				//trainTimeStart = System.currentTimeMillis();
+				trainTimeStart = System.nanoTime();
 				
-				C45PartiallyConsolidatedPruneableClassifierTreeParallel originalParallelTree = new C45PartiallyConsolidatedPruneableClassifierTreeParallel(m_toSelectModel, 
-						this.m_baseModelToForceDecision, this.m_pruneTheTree, this.m_CF, this.m_subtreeRaising, this.m_cleanup, this.m_collapseTheTree, 
+				C45PartiallyConsolidatedPruneableClassifierTreeParallel consolidationNumberParallelTree = new C45PartiallyConsolidatedPruneableClassifierTreeParallel(m_modSelection, 
+						this.m_baseModelToForceDecision, !this.m_pruneTheTree, this.m_CF, this.m_subtreeRaising, this.m_cleanup, !this.m_collapseTheTree, 
 						samplesVector.length, this.m_pruneBaseTreesWithoutPreservingConsolidatedStructure);
 				
-				originalParallelTree.buildTreeParallel(data, samplesVector, m_subtreeRaising || !m_cleanup, numCore); // build the tree without restrictions
+				consolidationNumberParallelTree.buildTreeParallel(data, samplesVector, m_subtreeRaising || !m_cleanup, numCore); // build the tree without restrictions
 								
 				if (m_collapseTheCTree) {
-					originalParallelTree.collapseParallel();
+					consolidationNumberParallelTree.collapseParallel();
 				}
 				if (m_pruneTheConsolidatedTree) {
-					originalParallelTree.pruneParallel();
+					consolidationNumberParallelTree.pruneParallel();
 				}
-				trainTimeElapsed = System.currentTimeMillis() - trainTimeStart;
-				System.out.println("Time taken to build the whole consolidated tree: " + Utils.doubleToString(trainTimeElapsed, 2) + " milliseconds\n");
+				//trainTimeElapsed = System.currentTimeMillis() - trainTimeStart;
+				trainTimeElapsed = (System.nanoTime() - trainTimeStart)/1000;
+				//System.out.println("Time taken to build the whole consolidated tree: " + Utils.doubleToString(trainTimeElapsed, 2) + " milliseconds\n");
+				System.out.println("Time taken to build the whole consolidated tree: " + Utils.doubleToString(trainTimeElapsed, 2) + " microseconds\n");
 				//System.out.println("Time taken to build the whole consolidated tree: " + Utils.doubleToString(trainTimeElapsed / 1000.0, 2) + " seconds\n");
 				m_elapsedTimeTrainingWholeCT = trainTimeElapsed / (double)1000.0;
+				
+				this.m_sons = consolidationNumberParallelTree.getSons();
 
 				if (m_priorityCriteria == J48It.Levelbylevel) {
 
@@ -140,7 +148,8 @@ public class C45ItPartiallyConsolidatedPruneableClassifierTreeParallel extends C
 			}
 
 			// buildTree
-			trainTimeStart = System.currentTimeMillis();
+			//trainTimeStart = System.currentTimeMillis();
+			trainTimeStart = System.nanoTime();
 			buildTreeParallel(data, samplesVector, m_subtreeRaising || !m_cleanup, numCore);
 			if (m_collapseTheCTree) {
 				collapse();
@@ -148,16 +157,19 @@ public class C45ItPartiallyConsolidatedPruneableClassifierTreeParallel extends C
 			if (m_pruneTheConsolidatedTree) {
 				prune();
 			}
-			trainTimeElapsed = System.currentTimeMillis() - trainTimeStart;
+			//trainTimeElapsed = System.currentTimeMillis() - trainTimeStart;
+			trainTimeElapsed = (System.nanoTime() - trainTimeStart)/1000;
 			//System.out.println("Time taken to build the partial consolidated tree: " + Utils.doubleToString(trainTimeElapsed / 1000.0, 2) + " seconds\n");
-			System.out.println("Time taken to build the partial consolidated tree: " + Utils.doubleToString(trainTimeElapsed, 2) + " milliseconds\n");
+			System.out.println("Time taken to build the partial consolidated tree: " + Utils.doubleToString(trainTimeElapsed, 2) + " microseconds\n");
 			m_elapsedTimeTrainingPartialCT = trainTimeElapsed / (double)1000.0;
 
-			trainTimeStart = System.currentTimeMillis();
-			applyBagging();
-			trainTimeElapsed = System.currentTimeMillis() - trainTimeStart;
+			//trainTimeStart = System.currentTimeMillis();
+			trainTimeStart = System.nanoTime();
+			applyBaggingParallel(numCore);
+			//trainTimeElapsed = System.currentTimeMillis() - trainTimeStart;
+			trainTimeElapsed = (System.nanoTime() - trainTimeStart)/1000;
 			//System.out.println("Time taken to build the associated Bagging: " + Utils.doubleToString(trainTimeElapsed / 1000.0, 2) + " seconds\n");
-			System.out.println("Time taken to build the associated Bagging: " + Utils.doubleToString(trainTimeElapsed, 2) + " milliseconds\n");
+			System.out.println("Time taken to build the associated Bagging: " + Utils.doubleToString(trainTimeElapsed, 2) + " microseconds\n");
 			m_elapsedTimeTrainingAssocBagging = trainTimeElapsed / (double)1000.0;
 
 			if (m_cleanup)
@@ -259,7 +271,7 @@ public class C45ItPartiallyConsolidatedPruneableClassifierTreeParallel extends C
 						} catch(Throwable e) {
 							e.printStackTrace();
 							numFailed.incrementAndGet();
-							System.out.println("Iteration " + currentSample + " failed!");
+							System.out.println("Iteration " + currentSample + " of setLocalModelTask failed!");
 						} finally {
 							doneSignal.countDown();
 						}
@@ -321,7 +333,7 @@ public class C45ItPartiallyConsolidatedPruneableClassifierTreeParallel extends C
 							} catch(Throwable e) {
 								e.printStackTrace();
 								numFailed.incrementAndGet();
-								System.out.println("Iteration " + currentSample + " failed!");
+								System.out.println("Iteration " + currentSample + " of createSonsVectorTask failed!");
 							} finally {
 								doneSignal2.countDown();
 							}
@@ -403,6 +415,8 @@ public class C45ItPartiallyConsolidatedPruneableClassifierTreeParallel extends C
 									double gainRatio;
 									ClassifierSplitModel sonModel = ((C45ItPartiallyConsolidatedPruneableClassifierTreeParallel) newTree).m_toSelectModel
 											.selectModel(currentLocalInstances[currentSon]);
+									//currentTree.m_localModel = ((C45ConsolidatedModelSelectionParallel) currentTree.m_toSelectModel)
+										//	.selectModelParallel(currentData, currentSamplesVector, numCore);
 									if (sonModel.numSubsets() > 1) {
 
 										gainRatio = ((C45Split) sonModel).gainRatio();
@@ -428,7 +442,7 @@ public class C45ItPartiallyConsolidatedPruneableClassifierTreeParallel extends C
 							} catch(Throwable e) {
 								e.printStackTrace();
 								numFailed.incrementAndGet();
-								System.out.println("Iteration " + currentSon + " failed!");
+								System.out.println("Iteration " + currentSon + " of getNewTreeTask failed!");
 							} finally {
 								doneSignal3.countDown();
 							}
@@ -437,6 +451,7 @@ public class C45ItPartiallyConsolidatedPruneableClassifierTreeParallel extends C
 					executorPool.submit(getNewTreeTask);
 				}
 				doneSignal3.await();
+				
 
 				if (m_priorityCriteria == J48ItPartiallyConsolidated.Levelbylevel) { // Level by level
 					list.addAll(listSons);
@@ -469,7 +484,48 @@ public class C45ItPartiallyConsolidatedPruneableClassifierTreeParallel extends C
 			index++;
 
 		}
+		
 		executorPool.shutdownNow();
+	}
+	
+	/**
+	 * Rebuilds each base tree according to J48 algorithm independently and
+	 *  maintaining the consolidated tree structure concurrently
+	 *  @param numCore the number of threads going to be used to apply Bagging in parallel
+	 * @throws Exception if something goes wrong
+	 */
+	protected void applyBaggingParallel(int numCore) throws Exception {
+		/** Number of Samples. */
+		int numberSamples = m_sampleTreeVector.length;
+		
+		ExecutorService executorPool = Executors.newFixedThreadPool(numCore);
+		
+		final CountDownLatch doneSignal = new CountDownLatch(numberSamples);
+		
+		final AtomicInteger numFailed = new AtomicInteger();
+		
+		
+		for (int iSample = 0; iSample < numberSamples; iSample++) {
+			
+			final int currentSample = iSample;
+			
+			Runnable BaggingTask = new Runnable() {
+				public void run() {
+					try {
+						m_sampleTreeVector[currentSample].rebuildTreeFromConsolidatedStructureAndPrune();
+					} catch (Throwable e) {
+						e.printStackTrace();
+						numFailed.incrementAndGet();
+						System.out.println("Iteration " + currentSample + " of BaggingTask failed!");
+					} finally {
+						doneSignal.countDown();
+					}
+				}
+			};
+			executorPool.submit(BaggingTask);
+		}
+		doneSignal.await();
+	    executorPool.shutdownNow();
 	}
 	
 
