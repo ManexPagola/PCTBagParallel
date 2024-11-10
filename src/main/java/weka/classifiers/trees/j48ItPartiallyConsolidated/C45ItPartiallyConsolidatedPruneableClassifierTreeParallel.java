@@ -5,6 +5,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.ReentrantLock;
 
 import weka.classifiers.trees.J48It;
 import weka.classifiers.trees.J48ItPartiallyConsolidated;
@@ -87,8 +88,8 @@ public class C45ItPartiallyConsolidatedPruneableClassifierTreeParallel extends C
 		} else {
 			if (consolidationNumberHowToSet == J48ItPartiallyConsolidated.ConsolidationNumber_Percentage) {
 					
-				//trainTimeStart = System.currentTimeMillis();
-				trainTimeStart = System.nanoTime();
+				trainTimeStart = System.currentTimeMillis();
+				//trainTimeStart = System.nanoTime();
 				
 				C45PartiallyConsolidatedPruneableClassifierTreeParallel consolidationNumberParallelTree = new C45PartiallyConsolidatedPruneableClassifierTreeParallel(m_modSelection, 
 						this.m_baseModelToForceDecision, !this.m_pruneTheTree, this.m_CF, this.m_subtreeRaising, this.m_cleanup, !this.m_collapseTheTree, 
@@ -102,11 +103,11 @@ public class C45ItPartiallyConsolidatedPruneableClassifierTreeParallel extends C
 				if (m_pruneTheConsolidatedTree) {
 					consolidationNumberParallelTree.pruneParallel();
 				}
-				//trainTimeElapsed = System.currentTimeMillis() - trainTimeStart;
-				trainTimeElapsed = (System.nanoTime() - trainTimeStart)/1000;
+				trainTimeElapsed = System.currentTimeMillis() - trainTimeStart;
+				//trainTimeElapsed = (System.nanoTime() - trainTimeStart)/1000;
 				//System.out.println("Time taken to build the whole consolidated tree: " + Utils.doubleToString(trainTimeElapsed, 2) + " milliseconds\n");
-				System.out.println("Time taken to build the whole consolidated tree: " + Utils.doubleToString(trainTimeElapsed, 2) + " microseconds\n");
-				//System.out.println("Time taken to build the whole consolidated tree: " + Utils.doubleToString(trainTimeElapsed / 1000.0, 2) + " seconds\n");
+				//System.out.println("Time taken to build the whole consolidated tree: " + Utils.doubleToString(trainTimeElapsed, 2) + " microseconds\n");
+				System.out.println("Time taken to build the whole consolidated tree: " + Utils.doubleToString(trainTimeElapsed / 1000.0, 2) + " seconds\n");
 				m_elapsedTimeTrainingWholeCT = trainTimeElapsed / (double)1000.0;
 				
 				this.m_sons = consolidationNumberParallelTree.getSons();
@@ -148,8 +149,8 @@ public class C45ItPartiallyConsolidatedPruneableClassifierTreeParallel extends C
 			}
 
 			// buildTree
-			//trainTimeStart = System.currentTimeMillis();
-			trainTimeStart = System.nanoTime();
+			trainTimeStart = System.currentTimeMillis();
+			//trainTimeStart = System.nanoTime();
 			buildTreeParallel(data, samplesVector, m_subtreeRaising || !m_cleanup, numCore);
 			if (m_collapseTheCTree) {
 				collapse();
@@ -157,19 +158,19 @@ public class C45ItPartiallyConsolidatedPruneableClassifierTreeParallel extends C
 			if (m_pruneTheConsolidatedTree) {
 				prune();
 			}
-			//trainTimeElapsed = System.currentTimeMillis() - trainTimeStart;
-			trainTimeElapsed = (System.nanoTime() - trainTimeStart)/1000;
-			//System.out.println("Time taken to build the partial consolidated tree: " + Utils.doubleToString(trainTimeElapsed / 1000.0, 2) + " seconds\n");
-			System.out.println("Time taken to build the partial consolidated tree: " + Utils.doubleToString(trainTimeElapsed, 2) + " microseconds\n");
+			trainTimeElapsed = System.currentTimeMillis() - trainTimeStart;
+			//trainTimeElapsed = (System.nanoTime() - trainTimeStart)/1000;
+			System.out.println("Time taken to build the partial consolidated tree: " + Utils.doubleToString(trainTimeElapsed / 1000.0, 2) + " seconds\n");
+			//System.out.println("Time taken to build the partial consolidated tree: " + Utils.doubleToString(trainTimeElapsed, 2) + " microseconds\n");
 			m_elapsedTimeTrainingPartialCT = trainTimeElapsed / (double)1000.0;
 
-			//trainTimeStart = System.currentTimeMillis();
-			trainTimeStart = System.nanoTime();
+			trainTimeStart = System.currentTimeMillis();
+			//trainTimeStart = System.nanoTime();
 			applyBaggingParallel(numCore);
-			//trainTimeElapsed = System.currentTimeMillis() - trainTimeStart;
-			trainTimeElapsed = (System.nanoTime() - trainTimeStart)/1000;
-			//System.out.println("Time taken to build the associated Bagging: " + Utils.doubleToString(trainTimeElapsed / 1000.0, 2) + " seconds\n");
-			System.out.println("Time taken to build the associated Bagging: " + Utils.doubleToString(trainTimeElapsed, 2) + " microseconds\n");
+			trainTimeElapsed = System.currentTimeMillis() - trainTimeStart;
+			//trainTimeElapsed = (System.nanoTime() - trainTimeStart)/1000;
+			System.out.println("Time taken to build the associated Bagging: " + Utils.doubleToString(trainTimeElapsed / 1000.0, 2) + " seconds\n");
+			//System.out.println("Time taken to build the associated Bagging: " + Utils.doubleToString(trainTimeElapsed, 2) + " microseconds\n");
 			m_elapsedTimeTrainingAssocBagging = trainTimeElapsed / (double)1000.0;
 
 			if (m_cleanup)
@@ -209,9 +210,11 @@ public class C45ItPartiallyConsolidatedPruneableClassifierTreeParallel extends C
 			m_sampleTreeVector[iSample].initiliazeTree(samplesVector[iSample], keepData);
 
 		ArrayList<Object[]> list = new ArrayList<>();
+		//Object[][] matList = new Object[1][5];
 
 		// add(Data, samplesVector, tree, orderValue, currentLevel)
 		list.add(new Object[] { data, samplesVector, this, null, 0 }); // The parent node is considered level 0
+		//matList[1] = new Object[] { data, samplesVector, this, null, 0 }; 
 
 		int index = 0;
 		//double orderValue;
@@ -219,8 +222,10 @@ public class C45ItPartiallyConsolidatedPruneableClassifierTreeParallel extends C
 		int internalNodes = 0;
 
 		while (list.size() > 0) {
+		//while (matList.length > 0) {
 
 			Object[] current = list.get(0);
+			//Object[] current = matList[0];
 
 			/** Current node level. **/
 			int currentLevel = (int) current[4];
@@ -231,6 +236,7 @@ public class C45ItPartiallyConsolidatedPruneableClassifierTreeParallel extends C
 
 			list.set(0, null); // Null to free up memory
 			list.remove(0);
+			//matList[0] = null;
 
 			Instances currentData = (Instances) current[0];
 			C45ItPartiallyConsolidatedPruneableClassifierTreeParallel currentTree = (C45ItPartiallyConsolidatedPruneableClassifierTreeParallel) current[2];
@@ -292,7 +298,8 @@ public class C45ItPartiallyConsolidatedPruneableClassifierTreeParallel extends C
 				 * Vector storing the obtained subsamples after the split of each sample of the
 				 * vector
 				 */
-				ArrayList<Instances[]> localInstancesVector = new ArrayList<Instances[]>();
+				//ArrayList<Instances[]> localInstancesVector = new ArrayList<Instances[]>();
+				Instances[][] localInstancesMatrix = new Instances[numberSamples][];
 
 				/**
 				 * For some base trees, although the current node is not a leaf, it could be
@@ -301,6 +308,7 @@ public class C45ItPartiallyConsolidatedPruneableClassifierTreeParallel extends C
 				 */
 
 				ArrayList<Object[]> listSons = new ArrayList<>();
+				//Object[][] matSons = new Object[1][5];
 
 				for (int iSample = 0; iSample < numberSamples; iSample++)
 					if (Utils.eq(currentTree.m_sampleTreeVector[iSample].getLocalModel().distribution().total(), 0))
@@ -308,8 +316,35 @@ public class C45ItPartiallyConsolidatedPruneableClassifierTreeParallel extends C
 
 				/** Split data according to the consolidated m_localModel */
 				localInstances = currentTree.m_localModel.split(currentData);
-				for (int iSample = 0; iSample < numberSamples; iSample++)
-					localInstancesVector.add(currentTree.m_localModel.split(currentSamplesVector[iSample]));
+				//for (int iSample = 0; iSample < numberSamples; iSample++)
+					//localInstancesVector.add(currentTree.m_localModel.split(currentSamplesVector[iSample]));
+				
+				final CountDownLatch doneSignal2 = new CountDownLatch(numberSamples);
+				
+				final Instances[] currentTaskSamplesVector = currentSamplesVector;
+				final Instances[][] currentLocalInstancesMatrix = localInstancesMatrix;
+				
+				for (int iSample = 0; iSample < numberSamples; iSample++) {
+					
+					final int nSample = iSample;
+					
+					Runnable localInstanceAddTask = new Runnable() {
+						public void run() {
+							try {
+								Instances[] currentInstance = currentTree.m_localModel.split(currentTaskSamplesVector[nSample]);
+								currentLocalInstancesMatrix[nSample] = currentInstance;
+							} catch(Throwable e) {
+								e.printStackTrace();
+								numFailed.incrementAndGet();
+								System.out.println("Iteration " + nSample + " of localInstanceAddTask failed!");
+							} finally {
+								doneSignal2.countDown();
+							}
+						}
+					};
+					executorPool.submit(localInstanceAddTask);
+				}
+				doneSignal2.await();
 
 				/**
 				 * Create the child nodes of the current node and call recursively to
@@ -319,7 +354,7 @@ public class C45ItPartiallyConsolidatedPruneableClassifierTreeParallel extends C
 				currentSamplesVector = null;
 				currentTree.m_sons = new ClassifierTree[currentTree.m_localModel.numSubsets()];
 				
-				final CountDownLatch doneSignal2 = new CountDownLatch(numberSamples);
+				final CountDownLatch doneSignal3 = new CountDownLatch(numberSamples);
 				
 				for (int iSample = 0; iSample < numberSamples; iSample++) {
 					
@@ -335,20 +370,22 @@ public class C45ItPartiallyConsolidatedPruneableClassifierTreeParallel extends C
 								numFailed.incrementAndGet();
 								System.out.println("Iteration " + currentSample + " of createSonsVectorTask failed!");
 							} finally {
-								doneSignal2.countDown();
+								doneSignal3.countDown();
 							}
 						}
 					};
 					executorPool.submit(createSonsVectorTask);
 				}
-				doneSignal2.await();
+				doneSignal3.await();
 					
 
 				//////////////////
 				C45ModelSelectionExtended baseModelToForceDecision = 
 						currentTree.m_sampleTreeVector[0].getBaseModelToForceDecision();
 				
-				final CountDownLatch doneSignal3 = new CountDownLatch(m_sons.length);
+				
+				final CountDownLatch doneSignal4 = new CountDownLatch(m_sons.length);
+				final ReentrantLock lock = new ReentrantLock();
 				
 				for (int iSon = 0; iSon < currentTree.m_sons.length; iSon++) {
 					
@@ -360,10 +397,10 @@ public class C45ItPartiallyConsolidatedPruneableClassifierTreeParallel extends C
 					Runnable getNewTreeTask = new Runnable() {
 						public void run() {
 							try {
-								/** Vector storing the subsamples related to the iSon-th son */
+								// Vector storing the subsamples related to the iSon-th son 
 								Instances[] localSamplesVector = new Instances[numberSamples];
 								for (int iSample = 0; iSample < numberSamples; iSample++)
-									localSamplesVector[iSample] = ((Instances[]) localInstancesVector.get(iSample))[currentSon];
+									localSamplesVector[iSample] = currentLocalInstancesMatrix[iSample][currentSon];
 
 								// getNewTree
 								C45ItPartiallyConsolidatedPruneableClassifierTreeParallel newTree = new C45ItPartiallyConsolidatedPruneableClassifierTreeParallel(
@@ -372,13 +409,15 @@ public class C45ItPartiallyConsolidatedPruneableClassifierTreeParallel extends C
 										m_pruneBaseTreesWithoutPreservingConsolidatedStructure,
 										m_priorityCriteria, m_pruneTheConsolidatedTree, m_collapseTheCTree);
 
-								/** Set the recent created base trees like the sons of the given parent node */
+								// Set the recent created base trees like the sons of the given parent node 
 								for (int iSample = 0; iSample < numberSamples; iSample++)
 									((C45PruneableClassifierTreeExtended) currentTree.m_sampleTreeVector[iSample]).setIthSon(currentSon,
 											newTree.m_sampleTreeVector[iSample]);
 								
 								double orderValue;
 
+								lock.lock();
+								
 								if (m_priorityCriteria == J48ItPartiallyConsolidated.Size) // Added by size, largest to smallest
 								{
 
@@ -434,6 +473,8 @@ public class C45ItPartiallyConsolidatedPruneableClassifierTreeParallel extends C
 									currentListSons.add(new Object[] { currentLocalInstances[currentSon], localSamplesVector, newTree, 0,
 											currentLevel + 1 });
 								}
+								
+								lock.unlock();
 
 								currentTree.m_sons[currentSon] = newTree;
 
@@ -444,13 +485,13 @@ public class C45ItPartiallyConsolidatedPruneableClassifierTreeParallel extends C
 								numFailed.incrementAndGet();
 								System.out.println("Iteration " + currentSon + " of getNewTreeTask failed!");
 							} finally {
-								doneSignal3.countDown();
+								doneSignal4.countDown();
 							}
 						}
 					};
 					executorPool.submit(getNewTreeTask);
 				}
-				doneSignal3.await();
+				doneSignal4.await();
 				
 
 				if (m_priorityCriteria == J48ItPartiallyConsolidated.Levelbylevel) { // Level by level
@@ -464,7 +505,7 @@ public class C45ItPartiallyConsolidatedPruneableClassifierTreeParallel extends C
 				}
 
 				localInstances = null;
-				localInstancesVector.clear();
+				localInstancesMatrix = null;
 				listSons = null;
 				internalNodes++;
 
@@ -526,6 +567,29 @@ public class C45ItPartiallyConsolidatedPruneableClassifierTreeParallel extends C
 		}
 		doneSignal.await();
 	    executorPool.shutdownNow();
+	}
+	
+	public void addSonOrderedByValueParallel(Object[][] matrix, Object[] son) {
+		if (matrix[0] == null) {
+			matrix[0] = son;
+		} else {
+			int i;
+			Object[][] newMatrix = new Object[matrix.length+1][5];
+			System.arraycopy(matrix, 0, newMatrix, 0, matrix.length);
+			matrix = newMatrix;
+			double sonValue = (double) son[3];
+			for (i = 0; i < matrix.length-1; i++) {
+				double parentValue = (double) matrix[i][3];
+				if (parentValue < sonValue) {
+					//list.add(i, son);
+					matrix[i+1] = matrix[i];
+					matrix[i] = son;
+					break;
+				}
+			}
+			if (i == matrix.length-1)
+				matrix[i] = son;
+		}
 	}
 	
 
