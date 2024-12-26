@@ -791,6 +791,7 @@ public class Bagging
   @Override
   public void buildClassifier(Instances data) throws Exception {
 
+	long baggingTimeStart, baggingTimeElapsed;
     // can classifier handle the data?
     getCapabilities().testWithFail(data);
 
@@ -819,8 +820,14 @@ public class Bagging
     }
 
     m_Numeric = m_data.classAttribute().isNumeric();
-
+    
+    baggingTimeStart = System.currentTimeMillis();
+    
     buildClassifiers();
+    
+    baggingTimeElapsed = System.currentTimeMillis() - baggingTimeStart;
+    
+    System.out.println("Bagging denbora: " + baggingTimeElapsed + " ms \n");
 
     // calc OOB error?
     if (getCalcOutOfBag()) {

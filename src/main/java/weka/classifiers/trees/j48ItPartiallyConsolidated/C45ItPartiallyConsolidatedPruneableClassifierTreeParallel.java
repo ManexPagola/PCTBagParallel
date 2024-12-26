@@ -107,8 +107,9 @@ public class C45ItPartiallyConsolidatedPruneableClassifierTreeParallel extends C
 				//trainTimeElapsed = (System.nanoTime() - trainTimeStart)/1000;
 				//System.out.println("Time taken to build the whole consolidated tree: " + Utils.doubleToString(trainTimeElapsed, 2) + " milliseconds\n");
 				//System.out.println("Time taken to build the whole consolidated tree: " + Utils.doubleToString(trainTimeElapsed, 2) + " microseconds\n");
-				System.out.println("Time taken to build the whole consolidated tree: " + Utils.doubleToString(trainTimeElapsed / 1000.0, 2) + " seconds\n");
+				System.out.println("Time taken to build the whole consolidated tree: " + Utils.doubleToString(trainTimeElapsed / 1000.0, 4) + " seconds\n");
 				m_elapsedTimeTrainingWholeCT = trainTimeElapsed / (double)1000.0;
+				//m_elapsedTimeTrainingWholeCT = trainTimeElapsed / (double)1.0;
 				
 				this.m_sons = consolidationNumberParallelTree.getSons();
 
@@ -160,18 +161,20 @@ public class C45ItPartiallyConsolidatedPruneableClassifierTreeParallel extends C
 			}
 			trainTimeElapsed = System.currentTimeMillis() - trainTimeStart;
 			//trainTimeElapsed = (System.nanoTime() - trainTimeStart)/1000;
-			System.out.println("Time taken to build the partial consolidated tree: " + Utils.doubleToString(trainTimeElapsed / 1000.0, 2) + " seconds\n");
+			System.out.println("Time taken to build the partial consolidated tree: " + Utils.doubleToString(trainTimeElapsed / 1000.0, 4) + " seconds\n");
 			//System.out.println("Time taken to build the partial consolidated tree: " + Utils.doubleToString(trainTimeElapsed, 2) + " microseconds\n");
 			m_elapsedTimeTrainingPartialCT = trainTimeElapsed / (double)1000.0;
+			//m_elapsedTimeTrainingPartialCT = trainTimeElapsed / (double)1.0;
 
 			trainTimeStart = System.currentTimeMillis();
 			//trainTimeStart = System.nanoTime();
 			applyBaggingParallel(numCore);
 			trainTimeElapsed = System.currentTimeMillis() - trainTimeStart;
 			//trainTimeElapsed = (System.nanoTime() - trainTimeStart)/1000;
-			System.out.println("Time taken to build the associated Bagging: " + Utils.doubleToString(trainTimeElapsed / 1000.0, 2) + " seconds\n");
+			System.out.println("Time taken to build the associated Bagging: " + Utils.doubleToString(trainTimeElapsed / 1000.0, 4) + " seconds\n");
 			//System.out.println("Time taken to build the associated Bagging: " + Utils.doubleToString(trainTimeElapsed, 2) + " microseconds\n");
 			m_elapsedTimeTrainingAssocBagging = trainTimeElapsed / (double)1000.0;
+			//m_elapsedTimeTrainingAssocBagging = trainTimeElapsed / (double)1.0;
 
 			if (m_cleanup)
 				cleanup(new Instances(data, 0));
@@ -474,12 +477,13 @@ public class C45ItPartiallyConsolidatedPruneableClassifierTreeParallel extends C
 											currentLevel + 1 });
 								}
 								
-								lock.unlock();
 
 								currentTree.m_sons[currentSon] = newTree;
 
 								currentLocalInstances[currentSon] = null;
 								localSamplesVector = null;
+								
+								lock.unlock();
 							} catch(Throwable e) {
 								e.printStackTrace();
 								numFailed.incrementAndGet();
@@ -540,9 +544,7 @@ public class C45ItPartiallyConsolidatedPruneableClassifierTreeParallel extends C
 		int numberSamples = m_sampleTreeVector.length;
 		
 		ExecutorService executorPool = Executors.newFixedThreadPool(numCore);
-		
 		final CountDownLatch doneSignal = new CountDownLatch(numberSamples);
-		
 		final AtomicInteger numFailed = new AtomicInteger();
 		
 		

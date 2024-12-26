@@ -88,9 +88,11 @@ public class C45PartiallyConsolidatedPruneableClassifierTree extends
 	 */
 	public void buildClassifier(Instances data, Instances[] samplesVector, float consolidationPercent) throws Exception {
 
-		long startTimeBT = System.nanoTime();
+		//long startTimeBT = System.nanoTime();
+		long startTimeBT = System.currentTimeMillis();
 		buildTree(data, samplesVector, m_subtreeRaising || !m_cleanup);
-		long endTimeBT = System.nanoTime();
+		long endTimeBT = System.currentTimeMillis();
+		//long endTimeBT = System.nanoTime();
 		
 		long startTimeCoPr = System.nanoTime();
 		if (m_collapseTheTree) {
@@ -101,25 +103,40 @@ public class C45PartiallyConsolidatedPruneableClassifierTree extends
 		}
 		long endTimeCoPr = System.nanoTime();
 		
-		long startTimePC = System.nanoTime();
+		//long startTimePC = System.nanoTime();
+		long startTimePC = System.currentTimeMillis();
 		leavePartiallyConsolidated(consolidationPercent);
-		long endTimePC = System.nanoTime();
+		long endTimePC = System.currentTimeMillis();
+		//long endTimePC = System.nanoTime();
 		
-		long startTimeBagging = System.nanoTime();
+		//long startTimeBagging = System.nanoTime();
+		long startTimeBagging = System.currentTimeMillis();
 		applyBagging();
-		long endTimeBagging = System.nanoTime();
+		long endTimeBagging = System.currentTimeMillis();
+		//long endTimeBagging = System.nanoTime();
 		
-		long execTimeBT = (endTimeBT - startTimeBT) / 1000;
-		long execTimeCoPr = (endTimeCoPr - startTimeCoPr) / 1000;
-		long execTimePC = (endTimePC - startTimePC) / 1000;
-		long execTimeBagging = (endTimeBagging - startTimeBagging) / 1000;
-		long totalTime = execTimeBT + execTimeCoPr + execTimePC + execTimeBagging;
+		long execTimeBT = (endTimeBT - startTimeBT);
+		long execTimeCoPr = (endTimeCoPr - startTimeCoPr);
+		long execTimePC = (endTimePC - startTimePC);
+		long execTimeBagging = (endTimeBagging - startTimeBagging);
+		long totalTime = execTimeBT + execTimePC + execTimeBagging;
 		
-		System.out.println("Zuhaitzaren eraiketak " + execTimeBT + " us behar izan ditu \n");
+		//System.out.println("Zuhaitzaren eraiketak " + execTimeBT + " us behar izan ditu \n");
+		System.out.println("Zuhaitzaren eraiketak " + Utils.doubleToString(execTimeBT/(double)1000.0, 4) + " s behar izan ditu \n");
+				
 		//System.out.println("Zuhaitzaren kolapso eta inausketak " + execTimeCoPr + " us behar izan ditu \n");
-		System.out.println("Kontsolidazio partzialaren exekuzioak " + execTimePC + " us behar izan ditu \n");
-		System.out.println("Bagging-en exekuzioak " + execTimeBagging + " us behar izan ditu \n");
-		System.out.println("Exekuzio denbora guztira: " + totalTime + " us \n");
+				
+				
+		//System.out.println("Kontsolidazio partzialaren exekuzioak " + execTimePC + " us behar izan ditu \n");
+		System.out.println("Kontsolidazio partzialaren exekuzioak " + Utils.doubleToString(execTimePC/(double)1000.0, 4) + " s behar izan ditu \n");
+				
+				
+		//System.out.println("Bagging-en exekuzioak " + execTimeBagging + " us behar izan ditu \n");
+		System.out.println("Bagging-en exekuzioak " + Utils.doubleToString(execTimeBagging/(double)1000.0, 4) + " s behar izan ditu \n");
+				
+				
+		//System.out.println("Exekuzio denbora guztira: " + totalTime + " us \n");
+		System.out.println("Exekuzio denbora guztira: " + Utils.doubleToString(totalTime/(double)1000.0, 4) + " s \n");
 		
 		if (m_cleanup)
 			cleanup(new Instances(data, 0));

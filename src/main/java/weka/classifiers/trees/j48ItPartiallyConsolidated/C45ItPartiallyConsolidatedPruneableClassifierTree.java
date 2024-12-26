@@ -130,6 +130,7 @@ public class C45ItPartiallyConsolidatedPruneableClassifierTree extends C45Partia
 				trainTimeElapsed = System.currentTimeMillis() - trainTimeStart;
 				System.out.println("Time taken to build the whole consolidated tree: " + Utils.doubleToString(trainTimeElapsed / 1000.0, 2) + " seconds\n");
 				m_elapsedTimeTrainingWholeCT = trainTimeElapsed / (double)1000.0;
+				//m_elapsedTimeTrainingWholeCT = trainTimeElapsed / (double)1.0;
 
 				if (m_priorityCriteria == J48It.Levelbylevel) {
 
@@ -179,12 +180,14 @@ public class C45ItPartiallyConsolidatedPruneableClassifierTree extends C45Partia
 			trainTimeElapsed = System.currentTimeMillis() - trainTimeStart;
 			System.out.println("Time taken to build the partial consolidated tree: " + Utils.doubleToString(trainTimeElapsed / 1000.0, 2) + " seconds\n");
 			m_elapsedTimeTrainingPartialCT = trainTimeElapsed / (double)1000.0;
+			//m_elapsedTimeTrainingPartialCT = trainTimeElapsed / (double)1.0;
 
 			trainTimeStart = System.currentTimeMillis();
 			applyBagging();
 			trainTimeElapsed = System.currentTimeMillis() - trainTimeStart;
 			System.out.println("Time taken to build the associated Bagging: " + Utils.doubleToString(trainTimeElapsed / 1000.0, 2) + " seconds\n");
 			m_elapsedTimeTrainingAssocBagging = trainTimeElapsed / (double)1000.0;
+			//m_elapsedTimeTrainingAssocBagging = trainTimeElapsed / (double)1.0;
 
 			if (m_cleanup)
 				cleanup(new Instances(data, 0));
