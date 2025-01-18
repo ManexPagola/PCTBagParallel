@@ -105,14 +105,19 @@ public class J48PartiallyConsolidatedParallel
 	 */
 	public void buildClassifier(Instances instances) throws Exception {
 		int numCore;
+		boolean m_static = false;
 		
-		if (this.m_numExecutionSlots < 0) {
-			System.out.println("ERROR!!!");
-			throw new Exception("Number of execution slots needs to be >= 0!");
-		}
+		//if (this.m_numExecutionSlots < 0) {
+			//System.out.println("ERROR!!!");
+			//throw new Exception("Number of execution slots needs to be >= 0!");
+		//}
 		
-		if (this.m_numExecutionSlots != 1) {
-			numCore = this.m_numExecutionSlots == 0 ? Runtime.getRuntime().availableProcessors() : this.m_numExecutionSlots;
+		if ((m_numExecutionSlots != 1) && (m_numExecutionSlots != -1)) {
+			numCore =
+			        (m_numExecutionSlots == 0) ? Runtime.getRuntime().availableProcessors()
+			          : (m_numExecutionSlots < 0) ? -m_numExecutionSlots : m_numExecutionSlots;
+			
+			if (m_numExecutionSlots < 0) m_static = true;
 			
 			// can classifier tree handle the data?
 			getCapabilities().testWithFail(instances);
@@ -121,13 +126,13 @@ public class J48PartiallyConsolidatedParallel
 			instances = new Instances(instances);
 			instances.deleteWithMissingClass();
 			
-			long startTime = System.nanoTime();
+			//long startTime = System.nanoTime();
 			//Generate as many samples as the number of samples with the given instances
 			Instances[] samplesVector = super.generateSamples(instances);
 			//Instances[] samplesVector = generateSamplesParallel(instances, numCore);
-			long endTime = System.nanoTime();
+			//long endTime = System.nanoTime();
 			
-			long execTime = (endTime - startTime) / 1000;
+			//long execTime = (endTime - startTime) / 1000;
 			
 			//System.out.println("Laginketak " + execTime + " mikros behar izan ditu \n");
 			
@@ -157,7 +162,7 @@ public class J48PartiallyConsolidatedParallel
 			}*/
 			//System.out.println("samplesVector length: " + samplesVector.length + "\n");
 
-			localClassifier.buildClassifierParallel(instances, samplesVector, m_PCTBconsolidationPercent, numCore);
+			localClassifier.buildClassifierParallel(instances, samplesVector, m_PCTBconsolidationPercent, numCore, m_static);
 
 			m_root = localClassifier;
 			m_Classifiers = localClassifier.getSampleTreeVector();

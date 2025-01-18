@@ -1,6 +1,7 @@
 package weka.classifiers.trees.j48ItPartiallyConsolidated;
 
 import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -69,7 +70,7 @@ public class C45ItPartiallyConsolidatedPruneableClassifierTreeParallel extends C
 	 * @throws Exception if something goes wrong
 	 */
 	public void buildClassifierParallel(Instances data, Instances[] samplesVector, float consolidationPercent,
-			int consolidationNumberHowToSet, int numCore) throws Exception {
+			int consolidationNumberHowToSet, int numCore, boolean is_static) throws Exception {
 		long trainTimeStart = 0, trainTimeElapsed = 0;
 		
 		
@@ -81,7 +82,7 @@ public class C45ItPartiallyConsolidatedPruneableClassifierTreeParallel extends C
 					this.m_baseModelToForceDecision, !this.m_pruneTheTree, this.m_CF, this.m_subtreeRaising, this.m_cleanup, !this.m_collapseTheTree, 
 					samplesVector.length, this.m_pruneBaseTreesWithoutPreservingConsolidatedStructure);
 			//super.buildClassifier(data, samplesVector, consolidationPercent);
-			originalParallelTree.buildClassifierParallel(data, samplesVector, consolidationPercent, numCore);
+			originalParallelTree.buildClassifierParallel(data, samplesVector, consolidationPercent, numCore, is_static);
 			this.m_localModel = originalParallelTree.getLocalModel();
 			this.m_sampleTreeVector = (C45PruneableClassifierTreeExtended[]) originalParallelTree.getSampleTreeVector();			
 
@@ -95,7 +96,12 @@ public class C45ItPartiallyConsolidatedPruneableClassifierTreeParallel extends C
 						this.m_baseModelToForceDecision, !this.m_pruneTheTree, this.m_CF, this.m_subtreeRaising, this.m_cleanup, !this.m_collapseTheTree, 
 						samplesVector.length, this.m_pruneBaseTreesWithoutPreservingConsolidatedStructure);
 				
-				consolidationNumberParallelTree.buildTreeParallel(data, samplesVector, m_subtreeRaising || !m_cleanup, numCore); // build the tree without restrictions
+				if (!is_static) {
+					consolidationNumberParallelTree.buildTreeParallel(data, samplesVector, m_subtreeRaising || !m_cleanup, numCore); // build the tree without restrictions concurrent dynamic
+				} else {
+					consolidationNumberParallelTree.buildTreeParallel_static(data, samplesVector, m_subtreeRaising || !m_cleanup, numCore); // build the tree without restrictions concurrent static
+				}
+				
 								
 				if (m_collapseTheCTree) {
 					consolidationNumberParallelTree.collapseParallel();
@@ -152,7 +158,13 @@ public class C45ItPartiallyConsolidatedPruneableClassifierTreeParallel extends C
 			// buildTree
 			trainTimeStart = System.currentTimeMillis();
 			//trainTimeStart = System.nanoTime();
-			buildTreeParallel(data, samplesVector, m_subtreeRaising || !m_cleanup, numCore);
+			
+			if (!is_static) {
+				buildTreeParallel(data, samplesVector, m_subtreeRaising || !m_cleanup, numCore);
+			} else {
+				buildTreeParallel_static(data, samplesVector, m_subtreeRaising || !m_cleanup, numCore);
+			}
+			
 			if (m_collapseTheCTree) {
 				collapse();
 			}
@@ -167,11 +179,17 @@ public class C45ItPartiallyConsolidatedPruneableClassifierTreeParallel extends C
 			//m_elapsedTimeTrainingPartialCT = trainTimeElapsed / (double)1.0;
 
 			trainTimeStart = System.currentTimeMillis();
-			//trainTimeStart = System.nanoTime();
-			applyBaggingParallel(numCore);
+			long trainTimeStart_pr = System.nanoTime();
+			
+			if (!is_static) {
+				applyBaggingParallel(numCore);
+			} else {
+				applyBaggingParallel_static(numCore);
+			}
+			
 			trainTimeElapsed = System.currentTimeMillis() - trainTimeStart;
-			//trainTimeElapsed = (System.nanoTime() - trainTimeStart)/1000;
-			System.out.println("Time taken to build the associated Bagging: " + Utils.doubleToString(trainTimeElapsed / 1000.0, 4) + " seconds\n");
+			long trainTimeElapsed_pr = (System.nanoTime() - trainTimeStart_pr);
+			System.out.println("Time taken to build the associated Bagging: " + Utils.doubleToString(trainTimeElapsed_pr / 1000000000.0, 6) + " seconds\n");
 			//System.out.println("Time taken to build the associated Bagging: " + Utils.doubleToString(trainTimeElapsed, 2) + " microseconds\n");
 			m_elapsedTimeTrainingAssocBagging = trainTimeElapsed / (double)1000.0;
 			//m_elapsedTimeTrainingAssocBagging = trainTimeElapsed / (double)1.0;
@@ -183,7 +201,7 @@ public class C45ItPartiallyConsolidatedPruneableClassifierTreeParallel extends C
 	
 	
 	/**
-	 * Builds the consolidated tree structure concurrently. (based on the method buildTree() of
+	 * Builds the consolidated tree structure dynamic concurrently (dynamic Multithreading). (based on the method buildTree() of
 	 * the class 'ClassifierTree')
 	 *
 	 * @param data          the data for pruning the consolidated tree
@@ -387,7 +405,7 @@ public class C45ItPartiallyConsolidatedPruneableClassifierTreeParallel extends C
 						currentTree.m_sampleTreeVector[0].getBaseModelToForceDecision();
 				
 				
-				final CountDownLatch doneSignal4 = new CountDownLatch(m_sons.length);
+				final CountDownLatch doneSignal4 = new CountDownLatch(currentTree.m_sons.length);
 				final ReentrantLock lock = new ReentrantLock();
 				
 				for (int iSon = 0; iSon < currentTree.m_sons.length; iSon++) {
@@ -533,9 +551,401 @@ public class C45ItPartiallyConsolidatedPruneableClassifierTreeParallel extends C
 		executorPool.shutdownNow();
 	}
 	
+	
+	/**
+	 * Builds the consolidated tree structure concurrently (static Multithreading). (based on the method buildTree() of
+	 * the class 'ClassifierTree')
+	 *
+	 * @param data          the data for pruning the consolidated tree
+	 * @param samplesVector the vector of samples used for consolidation
+	 * @param keepData      is training data to be kept?
+	 * @param numCore the number of threads going to be used to build the tree in parallel
+	 * @throws Exception if something goes wrong
+	 */
+	public void buildTreeParallel_static(Instances data, Instances[] samplesVector, boolean keepData, int numCore) throws Exception {
+		/** Number of Samples. */
+		int numberSamples = samplesVector.length;
+		
+		/** Initialize the consolidated tree */
+		if (keepData) {
+			m_train = data;
+		}
+		m_test = null;
+		m_isLeaf = false;
+		m_isEmpty = false;
+		m_sons = null;
+		/** Initialize the base trees */
+		for (int iSample = 0; iSample < numberSamples; iSample++)
+			m_sampleTreeVector[iSample].initiliazeTree(samplesVector[iSample], keepData);
+		
+		ArrayList<Object[]> list = new ArrayList<>();
+
+		list.add(new Object[] { data, samplesVector, this, null, 0 }); // The parent node is considered level 0 
+
+		int index = 0;
+
+		int internalNodes = 0;
+
+		while (list.size() > 0) {
+			
+			Object[] current = list.get(0);
+
+			/** Current node level. **/
+			int currentLevel = (int) current[4];
+
+			/** Number of Samples. */
+			Instances[] currentSamplesVector = (Instances[]) current[1];
+
+			list.set(0, null); // Null to free up memory
+			list.remove(0);
+
+			Instances currentData = (Instances) current[0];
+			C45ItPartiallyConsolidatedPruneableClassifierTreeParallel currentTree = (C45ItPartiallyConsolidatedPruneableClassifierTreeParallel) current[2];
+			currentTree.m_order = index;
+			
+			/** Initialize the consolidated tree */
+			if (keepData) {
+				currentTree.m_train = currentData;
+			}
+			currentTree.m_test = null;
+			currentTree.m_isLeaf = false;
+			currentTree.m_isEmpty = false;
+			currentTree.m_sons = null;
+
+			/** Initialize the base trees */
+			for (int iSample = 0; iSample < numberSamples; iSample++)
+				currentTree.m_sampleTreeVector[iSample].initiliazeTree(currentSamplesVector[iSample], keepData);
+
+			/**
+			 * Select the best model to split (if it is worth) based on the consolidation
+			 * process
+			 */
+			currentTree.m_localModel = ((C45ConsolidatedModelSelectionParallel) currentTree.m_toSelectModel).
+					selectModelParallel_static(currentData, currentSamplesVector, numCore);
+			
+			final int[] core_div_samples = new int[numCore];
+	  	  	for (int k = 0; k < numCore; k++) {
+	  	  		core_div_samples[k] = numberSamples/numCore;
+	  	  	}
+	  	  	if (numberSamples % numCore != 0) for (int m = 0; m < (numberSamples % numCore); m++) core_div_samples[m] += 1;
+	  	  
+		  	int loop_core_samples = (numberSamples < numCore) ? (numberSamples % numCore) : numCore;
+		  
+		  	final int[] core_carry_samples = new int[loop_core_samples];
+		  	core_carry_samples[0] = 0;
+		  	for (int k=1; k<loop_core_samples; k++) core_carry_samples[k] = core_carry_samples[k-1] + core_div_samples[k-1];
+		  	
+		  	List<Thread> numberSamplesThreads = new ArrayList<>();
+		  	
+		  	for (int i_core=0; i_core<loop_core_samples; i_core++) {
+		  		
+		  		final int current_core = i_core;
+		  		final Instances[] currentParallelSamplesVector = currentSamplesVector;
+		  		
+		  		Thread setLMThread = new Thread(new Runnable() {
+		  			@Override
+		  			public void run() {
+		  				try {
+		  					for (int i = 0; i < (core_div_samples[current_core]); i++) {
+		  						int LMindex = core_carry_samples[current_core]+i;
+		  						currentTree.m_sampleTreeVector[LMindex].setLocalModel(currentParallelSamplesVector[LMindex],
+										currentTree.m_localModel);
+		  					}
+		  				} catch (Throwable e) {
+		  					e.printStackTrace();
+		  				}
+		  			}
+		  		});
+		  		setLMThread.start();
+		  		numberSamplesThreads.add(setLMThread);
+		  	}
+		  	
+		  	for (Thread setLMThread: numberSamplesThreads) {
+		  		  try {
+		  			  setLMThread.join();
+				  } catch (InterruptedException e) {
+					  e.printStackTrace();
+				  }
+			}
+		  	
+		  	numberSamplesThreads.clear();
+			
+		  	if ((currentTree.m_localModel.numSubsets() > 1) && ((m_priorityCriteria == J48It.Original)
+					|| ((m_priorityCriteria == J48It.Levelbylevel) && (currentLevel < m_maximumCriteria))
+					|| ((m_priorityCriteria > J48It.Levelbylevel) && (internalNodes < m_maximumCriteria)))) {
+
+				/** Vector storing the obtained subsamples after the split of data */
+				Instances[] localInstances;
+				/**
+				 * Vector storing the obtained subsamples after the split of each sample of the
+				 * vector
+				 */
+				Instances[][] localInstancesMatrix = new Instances[numberSamples][];
+
+				/**
+				 * For some base trees, although the current node is not a leaf, it could be
+				 * empty. This is necessary in order to calculate correctly the class membership
+				 * probabilities for the given test instance in each base tree
+				 */
+
+				ArrayList<Object[]> listSons = new ArrayList<>();
+
+				for (int iSample = 0; iSample < numberSamples; iSample++)
+					if (Utils.eq(currentTree.m_sampleTreeVector[iSample].getLocalModel().distribution().total(), 0))
+						currentTree.m_sampleTreeVector[iSample].setIsEmpty(true);
+
+				/** Split data according to the consolidated m_localModel */
+				localInstances = currentTree.m_localModel.split(currentData);
+				
+				final Instances[][] currentLocalInstancesMatrix = localInstancesMatrix;
+				
+				for (int i_core=0; i_core<loop_core_samples; i_core++) {
+					
+					final int current_core = i_core;
+					final Instances[] currentTaskSamplesVector = currentSamplesVector;
+					
+					Thread LIAddThread = new Thread(new Runnable() {
+			  			@Override
+			  			public void run() {
+			  				try {
+			  					for (int i = 0; i < (core_div_samples[current_core]); i++) {
+			  						int LIAddIndex = core_carry_samples[current_core] + i;
+			  						Instances[] currentInstance = currentTree.m_localModel.split(currentTaskSamplesVector[LIAddIndex]);
+									currentLocalInstancesMatrix[LIAddIndex] = currentInstance;
+			  					}
+			  				} catch (Throwable e) {
+			  					e.printStackTrace();
+			  				}
+			  			}
+			  		});
+					LIAddThread.start();
+					numberSamplesThreads.add(LIAddThread);
+				}
+				
+				for (Thread LIAddThread: numberSamplesThreads) {
+			  		  try {
+			  			  LIAddThread.join();
+					  } catch (InterruptedException e) {
+						  e.printStackTrace();
+					  }
+				}
+				
+				numberSamplesThreads.clear();
+				
+				/** Create the child nodes of the current node and call recursively to getNewTree() */
+				currentData = null;
+				currentSamplesVector = null;
+				currentTree.m_sons = new ClassifierTree[currentTree.m_localModel.numSubsets()];
+				
+				
+				for (int i_core=0; i_core<loop_core_samples; i_core++) {
+					
+					final int current_core = i_core;
+					
+					Thread createSonsThread = new Thread(new Runnable() {
+			  			@Override
+			  			public void run() {
+			  				try {
+			  					for (int i = 0; i < (core_div_samples[current_core]); i++) {
+			  						int createSonsIndex = core_carry_samples[current_core] + i;
+			  						((C45PruneableClassifierTreeExtended) currentTree.m_sampleTreeVector[createSonsIndex])
+									.createSonsVector(currentTree.m_localModel.numSubsets());
+			  					}
+			  				} catch (Throwable e) {
+			  					e.printStackTrace();
+			  				}
+			  			}
+			  		});
+					createSonsThread.start();
+					numberSamplesThreads.add(createSonsThread);
+				}
+				
+				
+				for (Thread createSonsThread: numberSamplesThreads) {
+			  		  try {
+			  			  createSonsThread.join();
+					  } catch (InterruptedException e) {
+						  e.printStackTrace();
+					  }
+				}
+				
+				numberSamplesThreads.clear();
+				
+				C45ModelSelectionExtended baseModelToForceDecision = 
+						currentTree.m_sampleTreeVector[0].getBaseModelToForceDecision();
+				
+				final int[] core_div_sons = new int[numCore];
+				if (currentTree.m_sons == null) System.out.println("\n SONS NULL \n");  
+				//System.out.println("sons length: " + currentTree.m_sons.length + "\n");
+		  	  	for (int k = 0; k < numCore; k++) {
+		  	  		core_div_sons[k] = currentTree.m_sons.length/numCore;
+		  	  	}
+		  	  	if (currentTree.m_sons.length % numCore != 0) for (int m = 0; m < (currentTree.m_sons.length % numCore); m++) core_div_sons[m] += 1;
+		  	  
+			  	int loop_core_sons = (currentTree.m_sons.length < numCore) ? (currentTree.m_sons.length % numCore) : numCore;
+			  
+			  	final int[] core_carry_sons = new int[loop_core_sons];
+			  	core_carry_sons[0] = 0;
+			  	for (int k=1; k<loop_core_sons; k++) core_carry_sons[k] = core_carry_sons[k-1] + core_div_sons[k-1];
+			  	
+			  	List<Thread> sonsThreads = new ArrayList<>();
+			  	final Instances[] currentLocalInstances = localInstances;
+			  	final ReentrantLock lock = new ReentrantLock();
+			  	
+			  	for (int i_core=0; i_core<loop_core_sons; i_core++) {
+					
+					final int current_core = i_core;
+					final ArrayList<Object[]> currentList = list;
+					final ArrayList<Object[]> currentListSons = listSons;
+					
+					Thread getNewTreeThread = new Thread(new Runnable() {
+			  			@Override
+			  			public void run() {
+			  				try {
+			  					for (int i = 0; i < (core_div_sons[current_core]); i++) {
+			  						int getNewTreeIndex = core_carry_sons[current_core] + i;
+			  						// Vector storing the subsamples related to the iSon-th son 
+									Instances[] localSamplesVector = new Instances[numberSamples];
+									for (int iSample = 0; iSample < numberSamples; iSample++)
+										localSamplesVector[iSample] = currentLocalInstancesMatrix[iSample][getNewTreeIndex];
+									
+									// getNewTree
+									C45ItPartiallyConsolidatedPruneableClassifierTreeParallel newTree = new C45ItPartiallyConsolidatedPruneableClassifierTreeParallel(
+											currentTree.m_toSelectModel, baseModelToForceDecision, m_pruneTheTree, m_CF,
+											m_subtreeRaising, m_cleanup, m_collapseTheTree, localSamplesVector.length,
+											m_pruneBaseTreesWithoutPreservingConsolidatedStructure,
+											m_priorityCriteria, m_pruneTheConsolidatedTree, m_collapseTheCTree);
+									
+									// Set the recent created base trees like the sons of the given parent node 
+									for (int iSample = 0; iSample < numberSamples; iSample++)
+										((C45PruneableClassifierTreeExtended) currentTree.m_sampleTreeVector[iSample]).setIthSon(getNewTreeIndex,
+												newTree.m_sampleTreeVector[iSample]);
+									
+									double orderValue;
+									
+									lock.lock();
+									
+									if (m_priorityCriteria == J48ItPartiallyConsolidated.Size) // Added by size, largest to smallest
+									{
+
+										orderValue = currentTree.m_localModel.distribution().perBag(getNewTreeIndex);
+
+										Object[] son = new Object[] { currentLocalInstances[getNewTreeIndex], localSamplesVector, newTree, orderValue,
+												currentLevel + 1 };
+										addSonOrderedByValue(currentList, son);
+
+									} else if (m_priorityCriteria == J48ItPartiallyConsolidated.Gainratio) // Added by gainratio,
+																											// largest to smallest
+									{
+										ClassifierSplitModel sonModel = ((C45ItPartiallyConsolidatedPruneableClassifierTreeParallel) newTree).m_toSelectModel
+												.selectModel(currentLocalInstances[getNewTreeIndex]);
+										if (sonModel.numSubsets() > 1) {
+
+											orderValue = ((C45Split) sonModel).gainRatio();
+
+										} else {
+
+											orderValue = (double) Double.MIN_VALUE;
+										}
+										Object[] son = new Object[] { currentLocalInstances[getNewTreeIndex], localSamplesVector, newTree, orderValue,
+												currentLevel + 1 };
+										addSonOrderedByValue(currentList, son);
+
+									} else if (m_priorityCriteria == J48ItPartiallyConsolidated.Gainratio_normalized) // Added by
+																														// gainratio
+																														// normalized,
+									// largest to smallest
+									{
+
+										double size = currentTree.m_localModel.distribution().perBag(getNewTreeIndex);
+										double gainRatio;
+										ClassifierSplitModel sonModel = ((C45ItPartiallyConsolidatedPruneableClassifierTreeParallel) newTree).m_toSelectModel
+												.selectModel(currentLocalInstances[getNewTreeIndex]);
+										//currentTree.m_localModel = ((C45ConsolidatedModelSelectionParallel) currentTree.m_toSelectModel)
+											//	.selectModelParallel(currentData, currentSamplesVector, numCore);
+										if (sonModel.numSubsets() > 1) {
+
+											gainRatio = ((C45Split) sonModel).gainRatio();
+											orderValue = size * gainRatio;
+
+										} else {
+
+											orderValue = (double) Double.MIN_VALUE;
+										}
+										Object[] son = new Object[] { currentLocalInstances[getNewTreeIndex], localSamplesVector, newTree, orderValue,
+												currentLevel + 1 };
+										addSonOrderedByValue(currentList, son);
+
+									} else {
+										currentListSons.add(new Object[] { currentLocalInstances[getNewTreeIndex], localSamplesVector, newTree, 0,
+												currentLevel + 1 });
+									}
+									
+
+									currentTree.m_sons[getNewTreeIndex] = newTree;
+
+									currentLocalInstances[getNewTreeIndex] = null;
+									localSamplesVector = null;
+									
+									lock.unlock();
+			  					}
+			  				} catch (Throwable e) {
+			  					e.printStackTrace();
+			  				}
+			  			}
+					});
+					getNewTreeThread.start();
+					sonsThreads.add(getNewTreeThread);
+			  	}
+			  	
+			  	for (Thread getNewTreeThread: sonsThreads) {
+			  		  try {
+			  			getNewTreeThread.join();
+					  } catch (InterruptedException e) {
+						  e.printStackTrace();
+					  }
+				}
+				
+			  	sonsThreads.clear();
+			  	
+			  	if (m_priorityCriteria == J48ItPartiallyConsolidated.Levelbylevel) { // Level by level
+					list.addAll(listSons);
+				}
+
+				else if (m_priorityCriteria == J48ItPartiallyConsolidated.Preorder
+						|| m_priorityCriteria == J48ItPartiallyConsolidated.Original) { // Preorder
+					listSons.addAll(list);
+					list = listSons;
+				}
+
+				localInstances = null;
+				localInstancesMatrix = null;
+				listSons = null;
+				internalNodes++;
+		  	
+		  	} else {
+		  		currentTree.m_isLeaf = true;
+				for (int iSample = 0; iSample < numberSamples; iSample++)
+					currentTree.m_sampleTreeVector[iSample].setIsLeaf(true);
+
+				if (Utils.eq(currentTree.m_localModel.distribution().total(), 0)) {
+					currentTree.m_isEmpty = true;
+					for (int iSample = 0; iSample < numberSamples; iSample++)
+						currentTree.m_sampleTreeVector[iSample].setIsEmpty(true);
+				}
+				currentData = null;
+				currentSamplesVector = null;
+		  	}
+		  	index++;
+		}
+		
+		
+	}
+	
+	
 	/**
 	 * Rebuilds each base tree according to J48 algorithm independently and
-	 *  maintaining the consolidated tree structure concurrently
+	 *  maintaining the consolidated tree structure concurrently (dynamic Multithreading)
 	 *  @param numCore the number of threads going to be used to apply Bagging in parallel
 	 * @throws Exception if something goes wrong
 	 */
@@ -569,6 +979,62 @@ public class C45ItPartiallyConsolidatedPruneableClassifierTreeParallel extends C
 		}
 		doneSignal.await();
 	    executorPool.shutdownNow();
+	}
+	
+	
+	/**
+	 * Rebuilds each base tree according to J48 algorithm independently and
+	 *  maintaining the consolidated tree structure concurrently (static Multithreading)
+	 *  @param numCore the number of threads going to be used to apply Bagging in parallel
+	 * @throws Exception if something goes wrong
+	 */
+	protected void applyBaggingParallel_static(int numCore) throws Exception {
+		/** Number of Samples. */
+		int numberSamples = m_sampleTreeVector.length;
+		
+		final int[] core_div = new int[numCore];
+  	  	for (int k = 0; k < numCore; k++) {
+  		  core_div[k] = numberSamples/numCore;
+  	  	}
+  	  	if (numberSamples % numCore != 0) for (int m = 0; m < (numberSamples % numCore); m++) core_div[m] += 1;
+  	  
+  	  	int loop_core = (numberSamples < numCore) ? (numberSamples % numCore) : numCore;
+  	  
+  	  	final int[] core_carry = new int[loop_core];
+  	  	core_carry[0] = 0;
+  	  	for (int k=1; k<loop_core; k++) core_carry[k] = core_carry[k-1] + core_div[k-1];
+  	  	
+  	  	List<Thread> baggingThreads = new ArrayList<>();
+  	  	
+  	  	for (int i_core=0; i_core < loop_core; i_core++) {
+		  
+  	  		final int current_core = i_core;
+		  
+  	  		Thread bagThread = new Thread(new Runnable () {
+  	  			@Override
+  	  			public void run() {
+  	  				try {
+  	  					for (int i=0; i<core_div[current_core]; i++) {
+  	  						int index = core_carry[current_core]+i;
+  	  						m_sampleTreeVector[index].rebuildTreeFromConsolidatedStructureAndPrune();
+  	  					}
+  	  				} catch (Throwable e) {
+  	  					e.printStackTrace();
+  	  					System.out.print("Core " + current_core + " failed in applyBagging task!");
+  	  				}
+  	  			} 
+  	  		});
+  	  		bagThread.start();
+  	  		baggingThreads.add(bagThread);
+  	  	}
+  	  
+  	  	for (Thread bagThread: baggingThreads) {
+  	  		try {
+  	  			bagThread.join();
+  	  		} catch (InterruptedException e) {
+  	  			e.printStackTrace();
+  	  		}
+  	  	}
 	}
 	
 	public void addSonOrderedByValueParallel(Object[][] matrix, Object[] son) {

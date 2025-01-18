@@ -208,7 +208,13 @@ public abstract class ParallelIteratedSingleClassifierEnhancer extends
     	          @Override
     	          public void run() {
     	            try {
+    	              long start, end;
+    	              start = System.currentTimeMillis();
     	              currentClassifier.buildClassifier(getTrainingSet(iteration));
+    	              end = System.currentTimeMillis();
+    	              if (m_Debug) {
+    	    	          System.out.print("dynamic classifier (" + (iteration + 1) + "), time: " + (end-start) + " \n");
+    	    	      }
     	            } catch (Throwable ex) {
     	              ex.printStackTrace();
     	              numFailed.incrementAndGet();
@@ -253,15 +259,21 @@ public abstract class ParallelIteratedSingleClassifierEnhancer extends
     			    	        // MultiClassClassifier may produce occasional NULL classifiers ...
     			    	        if (currentClassifier == null)
     			    	          continue;
-    			    	        int iteration = index;
+    			    	        //int iteration = index;
 
     			    	        //if (m_Debug) {
     			    	          //System.out.print("Training classifier (" + (iteration + 1) + ")");
     			    	        //}
-    			    	        currentClassifier.buildClassifier(getTrainingSet(iteration));
-    			    	        if (m_Debug) {
-      			    	          System.out.print("Classifier (" + (iteration + 1) + ") trained! \n");
-      			    	        }
+    			    	        long start, end;
+    		    	              start = System.currentTimeMillis();
+    		    	              currentClassifier.buildClassifier(getTrainingSet(index));
+    		    	              end = System.currentTimeMillis();
+    		    	              if (m_Debug) {
+    		    	    	          System.out.print("static classifier (" + (index + 1) + "), time: " + (end-start) + " by thread: " + Thread.currentThread().getName() + " \n");
+    		    	    	      }
+    			    	       // if (m_Debug) {
+      			    	         // System.out.print("Classifier (" + (iteration + 1) + ") trained! \n");
+      			    	        //}
 
         				  }
     				  } catch (Throwable e) {

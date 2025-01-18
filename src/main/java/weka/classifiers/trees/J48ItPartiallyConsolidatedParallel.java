@@ -50,14 +50,19 @@ TechnicalInformationHandler {
 	 */
 	public void buildClassifier(Instances instances) throws Exception {
 		int numCore;
+		boolean m_static = false;
 		
-		if (this.m_numExecutionSlots < 0) {
-			System.out.println("ERROR!!!");
-			throw new Exception("Number of execution slots needs to be >= 0!");
-		}
+		//if (this.m_numExecutionSlots < 0) {
+			//System.out.println("ERROR!!!");
+			//throw new Exception("Number of execution slots needs to be >= 0!");
+		//}
 		
-		if (this.m_numExecutionSlots != 1) {
-			numCore = this.m_numExecutionSlots == 0 ? Runtime.getRuntime().availableProcessors() : this.m_numExecutionSlots;
+		if ((m_numExecutionSlots != 1) && (m_numExecutionSlots != -1)) {
+			numCore =
+			        (m_numExecutionSlots == 0) ? Runtime.getRuntime().availableProcessors()
+			          : (m_numExecutionSlots < 0) ? -m_numExecutionSlots : m_numExecutionSlots;
+			
+			if (m_numExecutionSlots < 0) m_static = true;
 			
 			// can classifier tree handle the data?
 			getCapabilities().testWithFail(instances);
@@ -86,7 +91,7 @@ TechnicalInformationHandler {
 							m_PCTBpruneBaseTreesWithoutPreservingConsolidatedStructure,
 							m_ITPCTpriorityCriteria, !m_ITPCTunprunedCT, m_ITPCTcollapseCT);
 
-			localClassifier.buildClassifierParallel(instances, samplesVector, m_PCTBconsolidationPercent, m_ITPCTconsolidationPercentHowToSet, numCore);
+			localClassifier.buildClassifierParallel(instances, samplesVector, m_PCTBconsolidationPercent, m_ITPCTconsolidationPercentHowToSet, numCore, m_static);
 
 			m_root = localClassifier;
 			m_Classifiers = localClassifier.getSampleTreeVector();
