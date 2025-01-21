@@ -147,7 +147,41 @@ public class C45ConsolidatedModelSelectionParallel extends C45ConsolidatedModelS
 		/** Vector storing the split point to use to split, if numerical, in each sample */
 		double[] splitPointVector = new double[numberSamples];
 		
-		final int[] core_div_samples = new int[numCore];
+		ExecutorService executorPool = Executors.newFixedThreadPool(numCore);
+
+		final CountDownLatch doneSignal = new CountDownLatch(numberSamples);
+		final AtomicInteger numFailed = new AtomicInteger();
+
+		for (int threadIndexSM = 0; threadIndexSM < numCore; threadIndexSM++) {
+		    final int assignedThreadSM = threadIndexSM;
+
+		    executorPool.submit(() -> {
+		        for (int iSample = assignedThreadSM; iSample < numberSamples; iSample += numCore) {
+		            try {
+		                ClassifierSplitModel localModel = m_toSelectModelToConsolidateParallel.selectModel(samplesVector[iSample]);
+		                if (localModel.numSubsets() > 1) {
+		                    attIndexVector[iSample] = ((C45Split) localModel).attIndex();
+		                    splitPointVector[iSample] = ((C45Split) localModel).splitPoint();
+		                } else {
+		                    attIndexVector[iSample] = -1;
+		                    splitPointVector[iSample] = -1;
+		                }
+		            } catch (Throwable e) {
+		                e.printStackTrace();
+		                numFailed.incrementAndGet();
+		                System.err.println("Iteration " + iSample + " failed!");
+		            } finally {
+		                doneSignal.countDown();
+		            }
+		        }
+		    });
+		}
+
+		doneSignal.await();
+		executorPool.shutdown();
+
+		
+		/**final int[] core_div_samples = new int[numCore];
   	  	for (int k = 0; k < numCore; k++) {
   	  		core_div_samples[k] = numberSamples/numCore;
   	  	}
@@ -195,7 +229,7 @@ public class C45ConsolidatedModelSelectionParallel extends C45ConsolidatedModelS
 			  } catch (InterruptedException e) {
 				  e.printStackTrace();
 			  }
-		  }
+		  }**/
 		
 		// Get the most voted attribute (index)
 		int votesCountByAtt[] = new int[data.numAttributes()];

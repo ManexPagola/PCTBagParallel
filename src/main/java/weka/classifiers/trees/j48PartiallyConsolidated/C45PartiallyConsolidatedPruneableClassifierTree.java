@@ -301,7 +301,7 @@ public class C45PartiallyConsolidatedPruneableClassifierTree extends
 		for (int iSample = 0; iSample < numberSamples; iSample++)
 			m_sampleTreeVector[iSample].initiliazeTree(samplesVector[iSample], keepData);
 
-		/** Select the best model to split (if it is worth) based on the consolidation proccess */
+		/** Select the best model to split (if it is worth) based on the consolidation process */
 		m_localModel = ((C45ConsolidatedModelSelection)m_toSelectModel).selectModel(data, samplesVector);
 		for (int iSample = 0; iSample < numberSamples; iSample++)
 			m_sampleTreeVector[iSample].setLocalModel(samplesVector[iSample],m_localModel);

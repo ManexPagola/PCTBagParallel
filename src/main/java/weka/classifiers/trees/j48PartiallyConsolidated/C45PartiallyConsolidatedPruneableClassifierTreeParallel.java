@@ -206,6 +206,8 @@ public class C45PartiallyConsolidatedPruneableClassifierTreeParallel extends C45
 			executorPool.submit(setLocalModelTask);
 		}
 		doneSignal2.await(); 
+		
+		
 		//executorPool.shutdownNow();
 
 		if (m_localModel.numSubsets() > 1) {
@@ -400,6 +402,10 @@ public class C45PartiallyConsolidatedPruneableClassifierTreeParallel extends C45
 	public void buildTreeParallel_static(Instances data, Instances[] samplesVector, boolean keepData, int numCore) throws Exception {
 		/** Number of Samples. */
 		int numberSamples = samplesVector.length;
+		
+		ExecutorService executorPool = Executors.newFixedThreadPool(numCore);
+		
+		final AtomicInteger numFailed = new AtomicInteger();
 
 		/** Initialize the consolidated tree */
 		if (keepData) {
@@ -417,7 +423,30 @@ public class C45PartiallyConsolidatedPruneableClassifierTreeParallel extends C45
 		/** Select the best model to split (if it is worth) based on the consolidation process */
 		m_localModel = ((C45ConsolidatedModelSelectionParallel)m_toSelectModel).selectModelParallel_static(data, samplesVector, numCore);
 		
-		final int[] core_div_samples = new int[numCore];
+		final CountDownLatch doneSignal2 = new CountDownLatch(numberSamples);
+		
+		final Instances[] currentSamplesVector = samplesVector;
+		
+		for (int threadIndexLM = 0; threadIndexLM < numCore; threadIndexLM++) {
+		    final int assignedThreadLM = threadIndexLM;
+
+		    executorPool.submit(() -> {
+		        for (int iSample = assignedThreadLM; iSample < numberSamples; iSample += numCore) {
+		            try {
+		                m_sampleTreeVector[iSample].setLocalModel(currentSamplesVector[iSample], m_localModel);
+		            } catch (Throwable e) {
+		                e.printStackTrace();
+		                numFailed.incrementAndGet();
+		                System.err.println("Iteration " + iSample + " failed!");
+		            }
+		            doneSignal2.countDown();
+		        }
+		    });
+		}
+
+		doneSignal2.await();
+		
+		/**final int[] core_div_samples = new int[numCore];
   	  	for (int k = 0; k < numCore; k++) {
   	  		core_div_samples[k] = numberSamples/numCore;
   	  	}
@@ -461,7 +490,7 @@ public class C45PartiallyConsolidatedPruneableClassifierTreeParallel extends C45
 			  }
 		  }
 	  	
-	  	numberSamplesThreads.clear();
+	  	numberSamplesThreads.clear();**/
 	  	
 	  	if (m_localModel.numSubsets() > 1) {
 			/** Vector storing the obtained subsamples after the split of data */
@@ -480,8 +509,33 @@ public class C45PartiallyConsolidatedPruneableClassifierTreeParallel extends C45
 			
 			/** Split data according to the consolidated m_localModel */
 			localInstances = m_localModel.split(data);
-			
+
+			final CountDownLatch doneSignal3 = new CountDownLatch(numberSamples);
 			final Instances[][] currentLocalInstancesMatrix = localInstancesMatrix;
+
+			// Static scheduling: Each thread processes every numCore-th sample
+			for (int threadIndexLIAdd = 0; threadIndexLIAdd < numCore; threadIndexLIAdd++) {
+			    final int assignedThreadLIAdd = threadIndexLIAdd;
+
+			    executorPool.submit(() -> {
+			        for (int iSample = assignedThreadLIAdd; iSample < numberSamples; iSample += numCore) {
+			            try {
+			                Instances[] currentInstance = m_localModel.split(currentSamplesVector[iSample]);
+			                currentLocalInstancesMatrix[iSample] = currentInstance;
+			            } catch (Throwable e) {
+			                e.printStackTrace();
+			                numFailed.incrementAndGet();
+			                System.out.println("Iteration " + iSample + " failed!");
+			            } finally {
+			                doneSignal3.countDown();
+			            }
+			        }
+			    });
+			}
+
+			doneSignal3.await();
+			
+			/**final Instances[][] currentLocalInstancesMatrix = localInstancesMatrix;
 			
 			for (int i_core=0; i_core<loop_core_samples; i_core++) {
 				
@@ -503,24 +557,73 @@ public class C45PartiallyConsolidatedPruneableClassifierTreeParallel extends C45
 		  		});
 				LIAddThread.start();
 				numberSamplesThreads.add(LIAddThread);
-			}
+			}**/
 			
 			/** Create the child nodes of the current node and call recursively to getNewTree() */
 			data = null;
 			samplesVector = null;
 			m_sons = new ClassifierTree [m_localModel.numSubsets()];
 			
-			for (Thread LIAddThread: numberSamplesThreads) {
-		  		  try {
-		  			  LIAddThread.join();
-				  } catch (InterruptedException e) {
-					  e.printStackTrace();
-				  }
+
+			final CountDownLatch doneSignal4 = new CountDownLatch(numberSamples);
+
+			for (int threadIndexCSV = 0; threadIndexCSV < numCore; threadIndexCSV++) {
+			    final int assignedThreadCSV = threadIndexCSV;
+
+			    executorPool.submit(() -> {
+			        for (int iSample = assignedThreadCSV; iSample < numberSamples; iSample += numCore) {
+			            try {
+			                ((C45PruneableClassifierTreeExtended) m_sampleTreeVector[iSample])
+			                    .createSonsVector(m_localModel.numSubsets());
+			            } catch (Throwable e) {
+			                e.printStackTrace();
+			                numFailed.incrementAndGet();
+			                System.out.println("Iteration " + iSample + " failed!");
+			            } finally {
+			                doneSignal4.countDown();
+			            }
+			        }
+			    });
 			}
-			
-			numberSamplesThreads.clear();
-			
-			for (int i_core=0; i_core<loop_core_samples; i_core++) {
+
+			doneSignal4.await();
+
+			final CountDownLatch doneSignal5 = new CountDownLatch(m_sons.length);
+			final Instances[] currentLocalInstances = localInstances;
+
+			// Static scheduling: Each thread processes every numCore-th son
+			for (int threadIndexGNW = 0; threadIndexGNW < numCore; threadIndexGNW++) {
+			    final int assignedThreadGNW = threadIndexGNW;
+
+			    executorPool.submit(() -> {
+			        for (int iSon = assignedThreadGNW; iSon < m_sons.length; iSon += numCore) {
+			            try {
+			                // Vector storing the subsamples related to the iSon-th son
+			                Instances[] localSamplesVector = new Instances[numberSamples];
+			                for (int iSample = 0; iSample < numberSamples; iSample++) {
+			                    localSamplesVector[iSample] = currentLocalInstancesMatrix[iSample][iSon];
+			                }
+
+			                m_sons[iSon] = (C45PartiallyConsolidatedPruneableClassifierTree) getNewTreeParallel(
+			                    currentLocalInstances[iSon], localSamplesVector, m_sampleTreeVector, iSon, numCore);
+
+			                currentLocalInstances[iSon] = null;
+			                localSamplesVector = null;
+			            } catch (Throwable e) {
+			                e.printStackTrace();
+			                numFailed.incrementAndGet();
+			                System.out.println("Iteration " + iSon + " of getNewTreeTask failed!");
+			            } finally {
+			                doneSignal5.countDown();
+			            }
+			        }
+			    });
+			}
+
+			doneSignal5.await();
+
+
+			/**for (int i_core=0; i_core<loop_core_samples; i_core++) {
 				
 				final int current_core = i_core;
 				
@@ -550,9 +653,9 @@ public class C45PartiallyConsolidatedPruneableClassifierTreeParallel extends C45
 				  }
 			}
 			
-			numberSamplesThreads.clear();
+			numberSamplesThreads.clear();**/
 			
-			final int[] core_div_sons = new int[numCore];
+			/**final int[] core_div_sons = new int[numCore];
 	  	  	for (int k = 0; k < numCore; k++) {
 	  	  		core_div_sons[k] = m_sons.length/numCore;
 	  	  	}
@@ -605,9 +708,11 @@ public class C45PartiallyConsolidatedPruneableClassifierTreeParallel extends C45
 				  }
 			}
 			
-		  	sonsThreads.clear();
+		  	sonsThreads.clear();**/
 			
-		
+			localInstances = null;
+			localInstancesMatrix = null;
+			
 	  	} else {
 	  		m_isLeaf = true;
 			for (int iSample = 0; iSample < numberSamples; iSample++)
@@ -621,6 +726,7 @@ public class C45PartiallyConsolidatedPruneableClassifierTreeParallel extends C45
 			data = null;
 			samplesVector = null;
 	  	}
+	  	executorPool.shutdown();
 	  	
 		
 	}
@@ -978,11 +1084,37 @@ public class C45PartiallyConsolidatedPruneableClassifierTreeParallel extends C45
 	 *  @param numCore the number of threads going to be used to apply Bagging in parallel
 	 * @throws Exception if something goes wrong
 	 */
-	private void applyBaggingParallel_static(int numCore) {
+	private void applyBaggingParallel_static(int numCore) throws Exception {
 		/** Number of Samples. */
 		int numberSamples = m_sampleTreeVector.length;
 		
-		final int[] core_div = new int[numCore];
+		ExecutorService executorPool = Executors.newFixedThreadPool(numCore);
+		final CountDownLatch doneSignal = new CountDownLatch(numberSamples);
+		final AtomicInteger numFailed = new AtomicInteger();
+
+		for (int threadIndexBag = 0; threadIndexBag < numCore; threadIndexBag++) {
+		    final int assignedThreadBag = threadIndexBag;
+
+		    executorPool.submit(() -> {
+		        for (int iSample = assignedThreadBag; iSample < numberSamples; iSample += numCore) {
+		            try {
+		                m_sampleTreeVector[iSample].rebuildTreeFromConsolidatedStructureAndPrune();
+		            } catch (Throwable e) {
+		                e.printStackTrace();
+		                numFailed.incrementAndGet();
+		                System.err.println("Iteration " + iSample + " failed!");
+		            } finally {
+		                doneSignal.countDown();
+		            }
+		        }
+		    });
+		}
+
+		doneSignal.await();
+		executorPool.shutdownNow();
+
+		
+		/**final int[] core_div = new int[numCore];
   	  	for (int k = 0; k < numCore; k++) {
   		  core_div[k] = numberSamples/numCore;
   	  	}
@@ -1024,7 +1156,7 @@ public class C45PartiallyConsolidatedPruneableClassifierTreeParallel extends C45
 		  } catch (InterruptedException e) {
 			  e.printStackTrace();
 		  }
-	  }
+	  }**/
 		
 	}
 	

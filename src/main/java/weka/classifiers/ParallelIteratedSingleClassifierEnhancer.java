@@ -182,16 +182,15 @@ public abstract class ParallelIteratedSingleClassifierEnhancer extends
         (m_numExecutionSlots == 0) ? Runtime.getRuntime().availableProcessors()
           : (m_numExecutionSlots < 0) ? -m_numExecutionSlots : m_numExecutionSlots;
       
+      ExecutorService executorPool = Executors.newFixedThreadPool(numCores);
       
+      final CountDownLatch doneSignal =
+		        new CountDownLatch(m_Classifiers.length);
 
       final AtomicInteger numFailed = new AtomicInteger();
       
       if (m_numExecutionSlots >= 0) {
     	  
-    	  ExecutorService executorPool = Executors.newFixedThreadPool(numCores);
-          
-          final CountDownLatch doneSignal =
-    		        new CountDownLatch(m_Classifiers.length);
     	  
     	  for (int i = 0; i < m_Classifiers.length; i++) {
 
@@ -230,8 +229,37 @@ public abstract class ParallelIteratedSingleClassifierEnhancer extends
     	        executorPool.submit(newTask);
     	      }
     	  doneSignal.await();
-      } else {    
-    	  final int[] core_div = new int[numCores];
+      } else {
+    	  
+    	  for (int threadIndex = 0; threadIndex < numCores; threadIndex++) {
+    		    final int assignedThread = threadIndex;
+    		    executorPool.submit(() -> {
+    		        for (int i = assignedThread; i < m_Classifiers.length; i += numCores) {
+    		            final Classifier currentClassifier = m_Classifiers[i];
+    		            if (currentClassifier == null) continue;
+
+    		            try {
+    		                long start = System.currentTimeMillis();
+    		                currentClassifier.buildClassifier(getTrainingSet(i));
+    		                long end = System.currentTimeMillis();
+    		                if (m_Debug) {
+    		                    System.out.println("Static classifier (" + (i + 1) + "), time: " + (end - start));
+    		                }
+    		            } catch (Throwable ex) {
+    		                ex.printStackTrace();
+    		                numFailed.incrementAndGet();
+    		                if (m_Debug) {
+    		                    System.err.println("Iteration " + i + " failed!");
+    		                }
+    		            }
+    		            doneSignal.countDown();
+    		        }
+    		    });
+    		}
+    		doneSignal.await();
+    		
+      }
+    	  /**final int[] core_div = new int[numCores];
     	  for (int k = 0; k < numCores; k++) {
     		  core_div[k] = m_Classifiers.length/numCores;
     	  }
@@ -292,10 +320,10 @@ public abstract class ParallelIteratedSingleClassifierEnhancer extends
     			  e.printStackTrace();
     		  }
     	  }
-      }
+      }**/
       
       
-      
+      executorPool.shutdown();
      
       if (m_Debug && numFailed.intValue() > 0) {
         System.err
